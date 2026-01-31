@@ -1,0 +1,39 @@
+apiVersion: kb/v1
+name: knowledge-base-integrity
+version: 0.1.0
+description: "Tooling for validating and enforcing knowledge base conventions"
+
+entrypoints:
+  human: README.md
+  agent: AGENTS.md
+
+meta:
+  entrypoint: ".graft/meta-knowledge-base/docs/meta.md"
+
+imports:
+  - kind: local
+    path: .graft/meta-knowledge-base
+    entrypoint: knowledge-base.yaml
+  - kind: local
+    path: .graft/living-specifications
+    entrypoint: knowledge-base.yaml
+
+paths:
+  docs: docs
+  specs: specs
+
+sources:
+  canonical:
+    - path: docs/**
+      note: "Tool documentation is canonical"
+    - path: specs/**
+      note: "Behavioral specifications are canonical"
+
+rules:
+  lifecycle:
+    statuses: ["draft", "working", "stable", "deprecated"]
+  provenance:
+    requiredFor: ["tool-documentation", "behavioral-specifications"]
+  writes:
+    allow: ["docs/**", "specs/**", "src/**", "tests/**"]
+    deny: ["secrets/**", "credentials/**", ".graft/**"]

@@ -1,0 +1,5 @@
+apiVersion: graft/v0
+deps:
+  meta-knowledge-base: "https://github.com/danielnaab/meta-knowledge-base.git#main"
+  living-specifications: "https://github.com/danielnaab/living-specifications.git#main"
+  python-starter: "ssh://forgejo@platform-vm:2222/daniel/python-starter.git#main"
