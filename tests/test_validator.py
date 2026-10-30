@@ -376,3 +376,32 @@ class TestValidation:
         result = validate(str(tmp_path))
 
         assert result.violations == []
+
+
+def test_links_in_html_comments_are_skipped():
+    content = "\n".join([
+        "[real](real.md) <!-- [inline](gone.md) --> [after](after.md)",
+        "<!--",
+        "- [example](example.md)",
+        "```",
+        "-->",
+        "[visible](visible.md)",
+        "<!-- one -->[x](x.md)<!-- two",
+        "[hidden](hidden.md) -->",
+    ])
+    assert _extract_links(content) == ["real.md", "after.md", "visible.md", "x.md"]
+
+
+def test_comment_markers_inside_code_spans_do_not_open_a_comment():
+    content = "Write `<!--` to start a comment. [still](checked.md)"
+    assert _extract_links(content) == ["checked.md"]
+
+
+def test_commented_out_links_are_not_reported(tmp_path: Path):
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "README.md").write_text(
+        "# Notes\n\n<!--\n- [example](session-example.md)\n-->\n[missing](missing.md)\n"
+    )
+    result = validate(str(tmp_path))
+    assert [v.target for v in result.violations] == ["missing.md"]
+    assert result.links_checked == 1

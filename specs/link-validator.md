@@ -28,7 +28,7 @@ This complements the [backlink scanner](backlink-scanner.md) (code→spec tracea
 Given a markdown file
 When the validator scans it
 Then it extracts all [text](target) links where target is a relative path
-  And it skips links inside fenced code blocks and inline code spans
+  And it skips links inside fenced code blocks, inline code spans and HTML comments
   And it still extracts links whose text is or contains a code span ([`name.py`](path))
   And it skips external links (any target that begins with a URI scheme)
 ```
@@ -39,6 +39,12 @@ Given a link whose target begins with a URI scheme
 When the validator scans it
 Then it treats the link as external and does not check or count it
   Examples: http:, https:, mailto:, tel:, file:, data:, airmail:, app:
+```
+
+```gherkin
+Given a link inside an HTML comment (<!-- ... -->), on one line or spanning several
+When the validator scans it
+Then it does not check or count it, and a code fence inside the comment does not open a block
 ```
 
 ```gherkin
@@ -170,6 +176,7 @@ Example output:
 - 2026-10-30: Decode percent-encoding after stripping the fragment and query. CommonMark and Obsidian decode `%20` and `%2C`, so `Meeting%20Notes.md` names `Meeting Notes.md`. Decoding last keeps an encoded `%23` in the path from being mistaken for a fragment. Violations report the target as written and the decoded resolved path.
 - 2026-10-30: Accept CommonMark angle-bracket destinations (`<Name with spaces.md>`). Obsidian writes them for filenames with spaces.
 - 2026-10-30: Replace inline code spans with placeholder text, not nothing, before matching links. Removing them outright also removed code-span link text, so `` [`gate.py`](path) `` was never checked and a real broken link went unreported. A link written entirely inside a code span is still ignored.
+- 2026-10-30: Skip links inside HTML comments. They aren't rendered, and templates use them for commented-out example entries: henry-papa-workbench's notes/README.md had four example links in a `<!-- ... -->` block reported as broken.
 
 ## Sources
 
