@@ -101,11 +101,19 @@ When the file lacks a Sources section
 Then no provenance violation is reported (provenance is optional for these paths)
 ```
 
+```gherkin
+Given a README.md in a path matching sources.canonical entries (docs/decisions/README.md)
+When the file lacks a Sources section
+Then no provenance violation is reported (a README indexes canonical docs; it is not one)
+  And its frontmatter status is still checked
+  And other files in the same canonical path still need a Sources section
+```
+
 ### Scanned paths
 
 - Content directories: docs/
 - Only `.md` files are checked
-- README.md files are included (they carry status and may need provenance)
+- README.md files are included (they carry status; they are exempt from provenance)
 - Files in subdirectories are included recursively
 - Skips: .git/, .graft/, .venv/, node_modules/, __pycache__/
 - Does not scan: specs/, src/, tests/, notes/ (specs have their own lifecycle; code and tests don't need frontmatter; notes are ephemeral)
@@ -173,6 +181,7 @@ Example output:
 - 2026-01-24: Notes excluded from linting. They're ephemeral explorations — enforcing structure on them contradicts their purpose.
 - 2026-10-30: End the sources.canonical block at the next sibling key, not only at a top-level key. Paths in sibling blocks such as interpretation: were read as canonical, so the docs listed there got false missing-provenance findings (daniel/digital-strategy: docs/README.md, docs/agents.md). Parsing stays targeted extraction, not a general YAML parser.
 - 2026-10-30: Decision records keep decision statuses. An ADR's status records the decision (proposed, accepted, rejected, superseded, deprecated), a separate axis from document lifecycle, so decision records may use those values as well as rules.lifecycle.statuses. Relabelling an accepted ADR as "stable" to satisfy the linter loses that information; Daniel rejected doing so. Evidence: graft's 9 accepted ADRs (docs/decisions/ and a grove adr-001 under docs/specifications/grove/) were flagged invalid-status. A decision record is a file under a decisions/ directory or named adr-*.md; a status is still required.
+- 2026-10-30: README.md files are exempt from provenance even when a sources.canonical glob (docs/decisions/**) covers them. A README indexes the canonical docs beside it; it is not a source of truth, and a Sources section on an index has nothing to cite. Status is still checked.
 
 ## Sources
 

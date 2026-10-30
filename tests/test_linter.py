@@ -301,6 +301,34 @@ class TestProvenanceValidation:
         ]
         assert provenance_violations == []
 
+    def test_readme_in_canonical_path_needs_no_sources(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/README.md").write_text("---\nstatus: working\n---\n\n# Index\n")
+        (tmp_path / "docs/decisions/README.md").write_text(
+            "---\nstatus: working\n---\n\n# Decisions\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        assert result.violations == []
+
+    def test_readme_exemption_is_provenance_only(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/decisions/README.md").write_text("---\nstatus: bogus\n---\n\n# D\n")
+        (tmp_path / "docs/decisions/0001-x.md").write_text(
+            "---\nstatus: accepted\n---\n\n# ADR without sources\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        found = sorted((v.file, v.rule) for v in result.violations)
+        assert found == [
+            ("docs/decisions/0001-x.md", "missing-provenance"),
+            ("docs/decisions/README.md", "invalid-status"),
+        ]
+
     def test_checks_subdirectories(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
         (tmp_path / "docs/sub").mkdir()

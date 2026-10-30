@@ -172,8 +172,12 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
                     )
                 )
 
-    # Check provenance for canonical paths
-    needs_provenance = any(_path_matches_glob(file, pattern) for pattern in config.provenance_paths)
+    # Check provenance for canonical paths. A README.md is an index of the
+    # canonical docs beside it, not a source of truth itself, so it is exempt.
+    is_index = Path(file).name == "README.md"
+    needs_provenance = not is_index and any(
+        _path_matches_glob(file, pattern) for pattern in config.provenance_paths
+    )
     if needs_provenance and not SOURCES_HEADING_PATTERN.search(content):
         violations.append(
             Violation(
