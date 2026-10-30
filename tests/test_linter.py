@@ -164,6 +164,75 @@ class TestFrontmatterValidation:
         status_violations = [v for v in result.violations if v.rule == "invalid-status"]
         assert status_violations == []
 
+    def test_accepts_decision_statuses_in_decisions_dir(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        for i, status in enumerate(
+            ["proposed", "accepted", "rejected", "superseded", "deprecated", "working"]
+        ):
+            (tmp_path / f"docs/decisions/000{i}-x.md").write_text(
+                f"---\nstatus: {status}\n---\n\n# ADR\n\n## Sources\n- x\n"
+            )
+
+        result = lint(str(tmp_path))
+
+        assert result.violations == []
+
+    def test_accepts_decision_status_in_adr_named_file(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/specifications/grove").mkdir(parents=True)
+        (tmp_path / "docs/specifications/grove/adr-001-layout.md").write_text(
+            "---\nstatus: accepted\n---\n\n# ADR\n\n## Sources\n- x\n"
+        )
+        (tmp_path / "docs/ADR-002-other.md").write_text(
+            "---\nstatus: superseded\n---\n\n# ADR\n\n## Sources\n- x\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        assert result.violations == []
+
+    def test_rejects_decision_status_outside_decision_records(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/guide.md").write_text(
+            "---\nstatus: accepted\n---\n\n# Guide\n\n## Sources\n- x\n"
+        )
+        (tmp_path / "docs/decisions.md").write_text(
+            "---\nstatus: accepted\n---\n\n# Not a record\n\n## Sources\n- x\n"
+        )
+        (tmp_path / "docs/my-adr-notes.md").write_text(
+            "---\nstatus: accepted\n---\n\n# Not a record\n\n## Sources\n- x\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        invalid = sorted(v.file for v in result.violations if v.rule == "invalid-status")
+        assert invalid == ["docs/decisions.md", "docs/guide.md", "docs/my-adr-notes.md"]
+
+    def test_decision_record_with_unknown_status_lists_both_sets(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/decisions/0001-x.md").write_text(
+            "---\nstatus: maybe\n---\n\n# ADR\n\n## Sources\n- x\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        assert [v.rule for v in result.violations] == ["invalid-status"]
+        assert "accepted" in result.violations[0].message
+        assert "draft" in result.violations[0].message
+
+    def test_decision_record_still_requires_status(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/decisions/0001-x.md").write_text(
+            "---\ntitle: x\n---\n\n# ADR\n\n## Sources\n- x\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        assert [v.rule for v in result.violations] == ["missing-status"]
+
     def test_reports_empty_frontmatter(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
         (tmp_path / "docs/empty-fm.md").write_text("---\n---\n\n# Content\n")
@@ -231,6 +300,34 @@ class TestProvenanceValidation:
             if v.file == "playbooks/guide.md" and v.rule == "missing-provenance"
         ]
         assert provenance_violations == []
+
+    def test_readme_in_canonical_path_needs_no_sources(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/README.md").write_text("---\nstatus: working\n---\n\n# Index\n")
+        (tmp_path / "docs/decisions/README.md").write_text(
+            "---\nstatus: working\n---\n\n# Decisions\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        assert result.violations == []
+
+    def test_readme_exemption_is_provenance_only(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/decisions").mkdir()
+        (tmp_path / "docs/decisions/README.md").write_text("---\nstatus: bogus\n---\n\n# D\n")
+        (tmp_path / "docs/decisions/0001-x.md").write_text(
+            "---\nstatus: accepted\n---\n\n# ADR without sources\n"
+        )
+
+        result = lint(str(tmp_path))
+
+        found = sorted((v.file, v.rule) for v in result.violations)
+        assert found == [
+            ("docs/decisions/0001-x.md", "missing-provenance"),
+            ("docs/decisions/README.md", "invalid-status"),
+        ]
 
     def test_checks_subdirectories(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
