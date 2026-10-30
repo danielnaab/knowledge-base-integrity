@@ -57,6 +57,17 @@ class TestLinkExtraction:
         content = "Example: ``[text](fake.md)`` and [real](real.md)"
         assert _extract_links(content) == ["real.md"]
 
+    def test_extracts_link_whose_text_is_inline_code(self) -> None:
+        content = "[`notecap_gate.py`](../../.claude/hooks/notecap_gate.py)"
+        assert _extract_links(content) == ["../../.claude/hooks/notecap_gate.py"]
+
+    def test_extracts_link_with_inline_code_in_text(self) -> None:
+        assert _extract_links("[see `x` here](a.md) and `[no](b.md)`") == ["a.md"]
+
+    def test_still_skips_link_inside_code_span_next_to_link(self) -> None:
+        content = "`[x](y.md)` then [`z`](z.md)"
+        assert _extract_links(content) == ["z.md"]
+
     def test_extracts_relative_parent_links(self) -> None:
         content = "[policy](../policies/rules.md)"
         assert _extract_links(content) == ["../policies/rules.md"]
@@ -108,6 +119,20 @@ class TestPathResolution:
 
     def test_scheme_must_start_with_letter(self) -> None:
         assert _resolve_path("1abc:foo.md", "docs") == "docs/1abc:foo.md"
+
+    def test_decodes_percent_encoding(self) -> None:
+        result = _resolve_path("../transcripts/2026-10-01%20-%20Meeting%2C%20Notes.md", "notes/sub")
+        assert result == "notes/transcripts/2026-10-01 - Meeting, Notes.md"
+
+    def test_decodes_after_stripping_fragment(self) -> None:
+        assert _resolve_path("a%20b.md%23not-a-fragment#real", "docs") == "docs/a b.md#not-a-fragment"
+
+    def test_strips_angle_brackets(self) -> None:
+        assert _resolve_path("<Name with spaces.md>", "notes") == "notes/Name with spaces.md"
+        assert _resolve_path("<Name with spaces.md#Heading>", "notes") == "notes/Name with spaces.md"
+
+    def test_angle_bracketed_scheme_is_external(self) -> None:
+        assert _resolve_path("<https://example.com/a b>", "docs") is None
 
     def test_returns_none_for_empty_after_strip(self) -> None:
         result = _resolve_path("#fragment-only", "docs")
@@ -214,6 +239,48 @@ class TestValidation:
         assert result.links_checked == 3
         assert len(result.violations) == 1
         assert result.violations[0].target == "missing.md"
+
+    def test_percent_encoded_link_to_existing_file(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "notes/transcripts").mkdir()
+        (tmp_path / "notes/transcripts/2026-10-01 - Meeting, Notes.md").write_text("# T\n")
+        (tmp_path / "notes/sub").mkdir()
+        (tmp_path / "notes/sub/source.md").write_text(
+            "[t](../transcripts/2026-10-01%20-%20Meeting%2C%20Notes.md)\n"
+            "[gone](../transcripts/Missing%20File.md)\n"
+        )
+
+        result = validate(str(tmp_path))
+
+        assert result.links_checked == 2
+        assert len(result.violations) == 1
+        assert result.violations[0].target == "../transcripts/Missing%20File.md"
+        assert result.violations[0].resolved == "notes/transcripts/Missing File.md"
+
+    def test_angle_bracket_link_to_existing_file(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "notes/Name with spaces.md").write_text("# N\n")
+        (tmp_path / "notes/source.md").write_text(
+            "[n](<Name with spaces.md>)\n[gone](<Not here.md>)\n"
+        )
+
+        result = validate(str(tmp_path))
+
+        assert result.links_checked == 2
+        assert len(result.violations) == 1
+        assert result.violations[0].target == "<Not here.md>"
+
+    def test_reports_broken_link_with_inline_code_text(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "docs/source.md").write_text(
+            "[`gate.py`](../hooks/gate.py) but not `[x](missing.md)`\n"
+        )
+
+        result = validate(str(tmp_path))
+
+        assert result.links_checked == 1
+        assert len(result.violations) == 1
+        assert result.violations[0].target == "../hooks/gate.py"
 
     def test_strips_fragment_before_checking(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
