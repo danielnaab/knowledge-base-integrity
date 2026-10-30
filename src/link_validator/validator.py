@@ -21,7 +21,12 @@ SKIP_DIRS = frozenset({".git", ".graft", ".venv", "node_modules", "__pycache__"}
 
 CONTENT_DIRS = ("docs", "policies", "playbooks", "notes", "specs")
 
-EXTERNAL_PREFIXES = ("http://", "https://", "mailto:")
+# A target that begins with a URI scheme (RFC 3986 section 3.1: a letter, then
+# letters, digits, "+", "-" or ".", then ":") is external: http:, mailto:,
+# airmail:, tel:, file:, data:, app: and so on. A relative path cannot match
+# because "/", "?" and "#" are not scheme characters, so the colon must come
+# before any of them.
+URI_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 
 
 @dataclass
@@ -99,7 +104,7 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
 
     Returns None if the target is external or empty after stripping.
     """
-    if any(target.startswith(prefix) for prefix in EXTERNAL_PREFIXES):
+    if URI_SCHEME_PATTERN.match(target):
         return None
 
     stripped = _strip_target(target)

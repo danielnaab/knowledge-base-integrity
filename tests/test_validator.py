@@ -87,6 +87,28 @@ class TestPathResolution:
         result = _resolve_path("mailto:user@example.com", "docs")
         assert result is None
 
+    def test_returns_none_for_any_uri_scheme(self) -> None:
+        for target in (
+            "airmail://message?mail=me%40example.com&messageid=abc",
+            "tel:+15555550100",
+            "file:///Users/daniel/Documents/report.pdf",
+            "data:image/png;base64,iVBORw0KGgo=",
+            "app://obsidian.md/note",
+            "obsidian://open?vault=notes",
+            "x-devonthink-item://1234",
+            "HTTPS://EXAMPLE.COM",
+        ):
+            assert _resolve_path(target, "docs") is None, target
+
+    def test_colon_after_path_separator_is_not_a_scheme(self) -> None:
+        assert _resolve_path("sub/a:b.md", "docs") == "docs/sub/a:b.md"
+        assert _resolve_path("./notes:foo.md", "docs") == "docs/notes:foo.md"
+        assert _resolve_path("file.md#section:one", "docs") == "docs/file.md"
+        assert _resolve_path("file.md?x=a:b", "docs") == "docs/file.md"
+
+    def test_scheme_must_start_with_letter(self) -> None:
+        assert _resolve_path("1abc:foo.md", "docs") == "docs/1abc:foo.md"
+
     def test_returns_none_for_empty_after_strip(self) -> None:
         result = _resolve_path("#fragment-only", "docs")
         assert result is None
@@ -160,6 +182,38 @@ class TestValidation:
 
         assert result.links_checked == 0
         assert result.violations == []
+
+    def test_skips_links_with_any_uri_scheme(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "notes/license.md").write_text(
+            "[email](airmail://message?mail=me%40example.com&messageid=abc)\n"
+            "[call](tel:+15555550100)\n"
+            "[pdf](file:///Users/daniel/Documents/report.pdf)\n"
+            "![dot](data:image/png;base64,iVBORw0KGgo=)\n"
+            "[app](app://some-app/path)\n"
+        )
+
+        result = validate(str(tmp_path))
+
+        assert result.links_checked == 0
+        assert result.violations == []
+
+    def test_relative_links_still_checked_alongside_schemes(self, tmp_path: Path) -> None:
+        _setup_kb(tmp_path)
+        (tmp_path / "notes/target.md").write_text("# Target\n")
+        (tmp_path / "notes/source.md").write_text(
+            "[email](airmail://message?mail=x)\n"
+            "[ok](target.md)\n"
+            "[anchor](target.md#section)\n"
+            "[self](#local-anchor)\n"
+            "[gone](missing.md)\n"
+        )
+
+        result = validate(str(tmp_path))
+
+        assert result.links_checked == 3
+        assert len(result.violations) == 1
+        assert result.violations[0].target == "missing.md"
 
     def test_strips_fragment_before_checking(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
