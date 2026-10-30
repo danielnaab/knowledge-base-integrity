@@ -47,6 +47,61 @@ class TestConfigParsing:
         assert "docs/**" in config.provenance_paths
         assert "policies/**" in config.provenance_paths
 
+    def test_stops_at_sibling_block_after_canonical(self, tmp_path: Path) -> None:
+        (tmp_path / "knowledge-base.yaml").write_text(
+            "sources:\n"
+            "  canonical:\n"
+            "    - path: docs/decisions/**\n"
+            "      note: \"Decisions are canonical\"\n"
+            "  interpretation:\n"
+            "    - path: docs/README.md\n"
+            "    - path: docs/agents.md\n"
+            "  tracking:\n"
+            "    - path: notes/**\n"
+        )
+
+        config = parse_config(tmp_path)
+
+        assert config.provenance_paths == ["docs/decisions/**"]
+
+    def test_reads_canonical_when_last_block(self, tmp_path: Path) -> None:
+        (tmp_path / "knowledge-base.yaml").write_text(
+            "sources:\n"
+            "  interpretation:\n"
+            "    - path: docs/README.md\n"
+            "  canonical:\n"
+            "    - path: docs/**\n"
+            "      note: \"Docs are canonical\"\n"
+            "\n"
+            "    # comment inside the block\n"
+            "    - path: policies/**\n"
+        )
+
+        config = parse_config(tmp_path)
+
+        assert config.provenance_paths == ["docs/**", "policies/**"]
+
+    def test_skips_nested_note_lines(self, tmp_path: Path) -> None:
+        (tmp_path / "knowledge-base.yaml").write_text(KB_YAML)
+
+        config = parse_config(tmp_path)
+
+        assert config.provenance_paths == ["docs/**", "policies/**"]
+
+    def test_reads_list_items_at_same_indent_as_canonical(self, tmp_path: Path) -> None:
+        (tmp_path / "knowledge-base.yaml").write_text(
+            "sources:\n"
+            "  canonical:\n"
+            "  - path: docs/**\n"
+            "    note: \"Docs\"\n"
+            "  tracking:\n"
+            "  - path: notes/**\n"
+        )
+
+        config = parse_config(tmp_path)
+
+        assert config.provenance_paths == ["docs/**"]
+
     def test_raises_when_config_missing(self, tmp_path: Path) -> None:
         import pytest
 
