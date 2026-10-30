@@ -63,22 +63,28 @@ def parse_config(root: Path) -> LintConfig:
         with contextlib.suppress(json.JSONDecodeError):
             valid_statuses = json.loads(statuses_match.group(1))
 
-    # Extract canonical paths from sources.canonical entries
+    # Extract canonical paths from sources.canonical entries. The block ends at
+    # the next key at the same or lesser indentation as "canonical:" (a sibling
+    # such as "interpretation:", or a top-level key). List items may sit at the
+    # same indentation as their parent key, which YAML allows.
     provenance_paths = []
-    in_canonical = False
+    canonical_indent: int | None = None
     for line in content.splitlines():
         stripped = line.strip()
-        if stripped == "canonical:":
-            in_canonical = True
+        indent = len(line) - len(line.lstrip())
+        if canonical_indent is None:
+            if stripped == "canonical:":
+                canonical_indent = indent
             continue
-        if in_canonical:
-            if stripped.startswith("- path:"):
-                path_value = stripped.removeprefix("- path:").strip().strip('"')
-                provenance_paths.append(path_value)
-            elif stripped.startswith("note:") or stripped == "":
-                continue
-            elif not line.startswith(" ") and not line.startswith("\t"):
-                break  # Exited the canonical block
+        if stripped == "" or stripped.startswith("#"):
+            continue
+        if stripped.startswith("- path:"):
+            if indent < canonical_indent:
+                break
+            path_value = stripped.removeprefix("- path:").strip().strip('"')
+            provenance_paths.append(path_value)
+        elif indent <= canonical_indent and not stripped.startswith("- "):
+            break  # Sibling or parent key: exited the canonical block
 
     return LintConfig(valid_statuses=valid_statuses, provenance_paths=provenance_paths)
 
