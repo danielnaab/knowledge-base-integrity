@@ -18,6 +18,10 @@ SKIP_DIRS = frozenset({".git", ".graft", ".venv", "node_modules", "__pycache__"}
 
 CONTENT_DIRS = ("docs", "policies", "playbooks")
 
+# Decision records (ADRs) record a decision state, a separate axis from
+# document lifecycle, so they may use these statuses as well as the KB's own.
+DECISION_STATUSES = ("proposed", "accepted", "rejected", "superseded", "deprecated")
+
 
 @dataclass
 class Violation:
@@ -114,6 +118,13 @@ def _path_matches_glob(path: str, pattern: str) -> bool:
     return path == pattern
 
 
+def _is_decision_record(path: str) -> bool:
+    """A decision record lives under a decisions/ directory or is named adr-*.md."""
+    parts = Path(path).parts
+    name = parts[-1]
+    return "decisions" in parts[:-1] or name.lower().startswith("adr-")
+
+
 def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
     """Check a single file for violations."""
     violations: list[Violation] = []
@@ -147,13 +158,16 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
             )
         elif config.valid_statuses:
             status_value = status_match.group(1)
-            if status_value not in config.valid_statuses:
+            allowed = list(config.valid_statuses)
+            if _is_decision_record(file):
+                allowed += [s for s in DECISION_STATUSES if s not in allowed]
+            if status_value not in allowed:
                 violations.append(
                     Violation(
                         file=file,
                         rule="invalid-status",
                         message=(
-                            f"Invalid status '{status_value}', allowed: {config.valid_statuses}"
+                            f"Invalid status '{status_value}', allowed: {allowed}"
                         ),
                     )
                 )
