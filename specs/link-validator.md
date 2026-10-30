@@ -1,6 +1,6 @@
 ---
 status: working
-last-verified: 2026-01-24
+last-verified: 2026-10-30
 owners: [daniel]
 ---
 
@@ -29,7 +29,21 @@ Given a markdown file
 When the validator scans it
 Then it extracts all [text](target) links where target is a relative path
   And it skips links inside fenced code blocks and inline code spans
-  And it skips external links (starting with http://, https://, or mailto:)
+  And it skips external links (any target that begins with a URI scheme)
+```
+
+```gherkin
+Given a link whose target begins with a URI scheme
+  (a letter, then letters, digits, "+", "-" or ".", then ":", per RFC 3986)
+When the validator scans it
+Then it treats the link as external and does not check or count it
+  Examples: http:, https:, mailto:, tel:, file:, data:, airmail:, app:
+```
+
+```gherkin
+Given a link whose first ":" comes after a "/", "?" or "#" (e.g., sub/a:b.md)
+When the validator scans it
+Then it treats the link as a relative path and checks it
 ```
 
 ### Path resolution
@@ -138,6 +152,7 @@ Example output:
 - 2026-01-24: Skip links inside code blocks and inline code spans. Specs and playbooks contain example link syntax that is illustrative, not navigational.
 - 2026-01-24: Check image links too. A broken image reference is as bad as a broken text link for content integrity.
 - 2026-01-24: Strip fragments before checking. Anchor validation is a harder problem (requires parsing headings) and is explicitly a non-goal for v1.
+- 2026-10-30: Treat any URI scheme as external, not just http:, https: and mailto:. App-specific schemes (Airmail's `airmail://message?...`, `tel:`, `data:`, `app:`) were resolved as relative paths and reported as broken: 264 false findings across 18 knowledge bases. `file:` links are external too, since they point outside the repository.
 
 ## Sources
 
