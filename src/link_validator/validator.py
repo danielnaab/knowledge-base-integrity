@@ -7,6 +7,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 # Matches [text](target) and ![alt](target)
 LINK_PATTERN = re.compile(r"!?\[(?:[^\]]*)\]\(([^)]*)\)")
@@ -77,8 +78,10 @@ def _extract_links(content: str) -> list[str]:
         if in_fence:
             continue
 
-        # Remove inline code spans before extracting links
-        line_without_code = INLINE_CODE_PATTERN.sub("", line)
+        # Replace inline code spans with a neutral placeholder before extracting
+        # links: a link written inside a code span disappears, but a code span
+        # used as link text ([`name`](path)) leaves a matchable [code](path).
+        line_without_code = INLINE_CODE_PATTERN.sub("code", line)
 
         for match in LINK_PATTERN.finditer(line_without_code):
             target = match.group(1).strip()
@@ -104,10 +107,15 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
 
     Returns None if the target is external or empty after stripping.
     """
+    # CommonMark angle-bracket destination: [text](<Name with spaces.md>)
+    if target.startswith("<") and target.endswith(">"):
+        target = target[1:-1].strip()
+
     if URI_SCHEME_PATTERN.match(target):
         return None
 
-    stripped = _strip_target(target)
+    # Decode percent-encoding (%20, %2C) as CommonMark and Obsidian do
+    stripped = unquote(_strip_target(target))
     if not stripped:
         return None
 
