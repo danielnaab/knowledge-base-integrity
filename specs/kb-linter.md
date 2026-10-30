@@ -31,6 +31,15 @@ Then it reads rules.lifecycle.statuses for valid status values
   And it reads sources.canonical paths for provenance-required directories
 ```
 
+```gherkin
+Given a knowledge-base.yaml where sources has sibling blocks after canonical
+  (e.g. interpretation: and tracking: at the same indentation as canonical:)
+When the linter reads sources.canonical paths
+Then it reads only the "- path:" entries inside the canonical block
+  And the block ends at the next key at the same or lesser indentation as canonical:
+  And nested lines such as note: are skipped
+```
+
 ### Frontmatter validation
 
 ```gherkin
@@ -147,6 +156,7 @@ Example output:
 - 2026-01-24: Read rules from knowledge-base.yaml rather than hardcoding. Keeps the tool adaptable to different KBs and avoids drift between declared rules and enforcement.
 - 2026-01-24: Provenance checking uses `sources.canonical` paths to determine which files need Sources sections. This is more precise than checking all files (notes are ephemeral).
 - 2026-01-24: Notes excluded from linting. They're ephemeral explorations — enforcing structure on them contradicts their purpose.
+- 2026-10-30: End the sources.canonical block at the next sibling key, not only at a top-level key. Paths in sibling blocks such as interpretation: were read as canonical, so the docs listed there got false missing-provenance findings (daniel/digital-strategy: docs/README.md, docs/agents.md). Parsing stays targeted extraction, not a general YAML parser.
 
 ## Sources
 

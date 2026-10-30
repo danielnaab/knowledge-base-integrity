@@ -7,6 +7,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 # Matches [text](target) and ![alt](target)
 LINK_PATTERN = re.compile(r"!?\[(?:[^\]]*)\]\(([^)]*)\)")
@@ -16,6 +17,10 @@ FENCE_PATTERN = re.compile(r"^(`{3,}|~{3,})")
 
 # Matches inline code spans (backtick-wrapped)
 INLINE_CODE_PATTERN = re.compile(r"(`+)(.+?)\1")
+
+# HTML comments: links inside one are not rendered, so they are not checked.
+COMMENT_OPEN = "<!--"
+COMMENT_CLOSE = "-->"
 
 SKIP_DIRS = frozenset({".git", ".graft", ".venv", "node_modules", "__pycache__"})
 
@@ -49,14 +54,45 @@ class ValidateResult:
     links_checked: int = 0
 
 
+def _strip_comments(line: str, in_comment: bool) -> tuple[str, bool]:
+    """Remove the parts of a line inside HTML comments, which may span lines.
+
+    Returns the visible text and whether a comment is still open at the end.
+    """
+    visible = ""
+    rest = line
+    while rest:
+        if in_comment:
+            end = rest.find(COMMENT_CLOSE)
+            if end == -1:
+                return visible, True
+            rest = rest[end + len(COMMENT_CLOSE):]
+            in_comment = False
+        else:
+            start = rest.find(COMMENT_OPEN)
+            if start == -1:
+                return visible + rest, False
+            visible += rest[:start]
+            rest = rest[start + len(COMMENT_OPEN):]
+            in_comment = True
+    return visible, in_comment
+
+
 def _extract_links(content: str) -> list[str]:
-    """Extract link targets from markdown, skipping fenced code blocks."""
+    """Extract link targets from markdown, skipping fenced code blocks and HTML comments."""
     targets: list[str] = []
     in_fence = False
+    in_comment = False
     fence_char = ""
     fence_len = 0
 
     for line in content.splitlines():
+        # Inside an HTML comment nothing counts, fences included, until it closes.
+        if in_comment:
+            line, in_comment = _strip_comments(line, True)
+            if in_comment:
+                continue
+
         stripped = line.strip()
         fence_match = FENCE_PATTERN.match(stripped)
 
@@ -77,10 +113,14 @@ def _extract_links(content: str) -> list[str]:
         if in_fence:
             continue
 
-        # Remove inline code spans before extracting links
-        line_without_code = INLINE_CODE_PATTERN.sub("", line)
+        # Replace inline code spans with a neutral placeholder before extracting
+        # links: a link written inside a code span disappears, but a code span
+        # used as link text ([`name`](path)) leaves a matchable [code](path).
+        # Code spans go first, so a `<!--` written inside one doesn't open a comment.
+        line_without_code = INLINE_CODE_PATTERN.sub("code", line)
+        visible, in_comment = _strip_comments(line_without_code, False)
 
-        for match in LINK_PATTERN.finditer(line_without_code):
+        for match in LINK_PATTERN.finditer(visible):
             target = match.group(1).strip()
             if target:
                 targets.append(target)
@@ -104,10 +144,15 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
 
     Returns None if the target is external or empty after stripping.
     """
+    # CommonMark angle-bracket destination: [text](<Name with spaces.md>)
+    if target.startswith("<") and target.endswith(">"):
+        target = target[1:-1].strip()
+
     if URI_SCHEME_PATTERN.match(target):
         return None
 
-    stripped = _strip_target(target)
+    # Decode percent-encoding (%20, %2C) as CommonMark and Obsidian do
+    stripped = unquote(_strip_target(target))
     if not stripped:
         return None
 
