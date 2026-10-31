@@ -7,17 +7,6 @@ entrypoints:
   human: README.md
   agent: AGENTS.md
 
-meta:
-  entrypoint: ".graft/meta-knowledge-base/docs/meta.md"
-
-imports:
-  - kind: local
-    path: .graft/meta-knowledge-base
-    entrypoint: knowledge-base.yaml
-  - kind: local
-    path: .graft/living-specifications
-    entrypoint: knowledge-base.yaml
-
 paths:
   docs: docs
   specs: specs
@@ -36,4 +25,4 @@ rules:
     requiredFor: ["tool-documentation", "behavioral-specifications"]
   writes:
     allow: ["docs/**", "specs/**", "src/**", "tests/**"]
-    deny: ["secrets/**", "credentials/**", ".graft/**"]
+    deny: ["secrets/**", "credentials/**"]   # enforced by .claude/settings.json

@@ -4,7 +4,7 @@ Tooling for validating and enforcing knowledge base conventions.
 
 ## What This Is
 
-This repository provides CLI tools that enforce structural integrity for knowledge bases following the [living-specifications](.graft/living-specifications/) methodology. The tools detect:
+This repository provides CLI tools that enforce structural integrity for knowledge bases following the [living-specifications](https://github.com/danielnaab/living-specifications) methodology. The tools detect:
 
 - **Broken backlinks** — spec annotations (`# spec:`) referencing non-existent files
 - **Orphan specs** — specification files with no implementation references
@@ -109,5 +109,5 @@ uv run link-validator
 
 ## Sources
 
-- [Living Specifications Methodology](.graft/living-specifications/)
-- [Meta Knowledge Base Patterns](.graft/meta-knowledge-base/)
+- [Living Specifications Methodology](https://github.com/danielnaab/living-specifications)
+- [Meta Knowledge Base Patterns](https://github.com/danielnaab/meta-knowledge-base)
