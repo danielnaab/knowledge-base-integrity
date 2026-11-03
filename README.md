@@ -4,7 +4,7 @@ Tooling for validating and enforcing knowledge base conventions.
 
 ## What This Is
 
-This repository provides CLI tools that enforce structural integrity for knowledge bases following the [living-specifications](vendor/living-specifications/README.md) methodology. The tools detect:
+This repository provides CLI tools that enforce structural integrity for knowledge bases following the [living-specifications](scions/living-specifications/README.md) methodology. The tools detect:
 
 - **Broken backlinks** — spec annotations (`# spec:`) referencing non-existent files
 - **Orphan specs** — specification files with no implementation references
@@ -109,5 +109,5 @@ uv run link-validator
 
 ## Sources
 
-- [Living Specifications Methodology](vendor/living-specifications/README.md)
-- [Meta Knowledge Base Patterns](vendor/meta-knowledge-base/README.md)
+- [Living Specifications Methodology](scions/living-specifications/README.md)
+- [Meta Knowledge Base Patterns](scions/meta-knowledge-base/README.md)
