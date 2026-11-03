@@ -54,7 +54,7 @@ Guiding principle: steal structures, not tooling.
 ## Using This in Your Repository
 
 Graft it ([graft](https://github.com/danielnaab/graft)): a pinned copy of this repo's export
-(README, CHANGELOG, `docs/`) in your `vendor/living-specifications/`, then link into that copy from
+(README, CHANGELOG, `docs/`) in your `scions/living-specifications/`, then link into that copy from
 your agent instructions (`AGENTS.md` or `CLAUDE.md`):
 
 ```nix
