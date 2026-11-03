@@ -7,7 +7,7 @@ Guidance for knowledge bases that import or depend on others.
 
 ## Take a dependency
 
-Graft it: the dependency's export, at a pinned commit, committed under `vendor/<name>/`. Every
+Graft it: the dependency's export, at a pinned commit, committed under `scions/<name>/` (a *scion* is what's grafted on). Every
 clone, worktree, agent and the forge's web view then reads the same text with nothing to set up.
 See [graft](https://github.com/danielnaab/graft/tree/v2) for the flake inputs; in short:
 
@@ -16,19 +16,19 @@ inputs.meta-knowledge-base = { url = "github:danielnaab/meta-knowledge-base/v1.0
 outputs = inputs: inputs.graft.lib.mkGraft { inherit inputs; deps = [ "meta-knowledge-base" ]; };
 ```
 
-`nix run .#graft` writes `vendor/`; `nix flake check` fails if it drifts from `flake.lock`.
-Never edit `vendor/`: it is overwritten on the next graft.
+`nix run .#graft` writes `scions/`; `nix flake check` fails if it drifts from `flake.lock`.
+Never edit `scions/`: it is overwritten on the next graft.
 
 Then say what the dependency is to you, in knowledge-base.yaml:
 
 ```yaml
 imports:
   - kind: local
-    path: vendor/meta-knowledge-base
+    path: scions/meta-knowledge-base
     relationship: "foundational"
 
   - kind: local
-    path: vendor/project-specs
+    path: scions/project-specs
     relationship: "canonical-source"
     sync_policy: "interpret"
 ```
@@ -36,8 +36,8 @@ imports:
 ## Provide one
 
 What you export is your decision, made in `.gitattributes`: paths marked `export-ignore` stay
-out of what others graft. Always exclude your own `vendor/`: consumers take your content, never
-your dependencies, so every repo has one level of `vendor/` and one copy of each dependency.
+out of what others graft. Always exclude your own `scions/`: consumers take your content, never
+your dependencies, so every repo has one level of scions and one copy of each dependency.
 Tag releases (`v1.0.0`) so consumers pin something readable, and say what changed in a CHANGELOG.
 
 ## Relationship types
@@ -67,7 +67,7 @@ Tag releases (`v1.0.0`) so consumers pin something readable, and say what change
 
 **Extend policy** (for foundational):
 - Mark inherited vs added content
-- The pinned version is in `flake.lock` and `vendor/README.md`
+- The pinned version is in `flake.lock` and `scions/README.md`
 - Update when foundation changes: `nix flake update <name>`, `nix run .#graft`, review the diff
 
 **Reference policy** (for peer):
@@ -78,14 +78,14 @@ Tag releases (`v1.0.0`) so consumers pin something readable, and say what change
 
 Link into the grafted copy with relative paths, so links resolve at the pinned version:
 ```markdown
-[canonical architecture](../vendor/canonical-kb/docs/architecture.md)
+[canonical architecture](../scions/canonical-kb/docs/architecture.md)
 ```
 
 Declare in knowledge-base.yaml:
 ```yaml
 sources:
   canonical:
-    - path: "vendor/canonical-kb/docs/spec.md"
+    - path: "scions/canonical-kb/docs/spec.md"
       note: "Specifications are canonical"
   interpretation:
     - path: "docs/guides/**"
@@ -101,7 +101,7 @@ Avoid:
 - No sync tracking
 - Links to a sibling checkout (`../other-kb/`) or to another repo's `main`: they resolve to
   whatever is there today, or nothing
-- Editing a grafted copy in `vendor/`
+- Editing a grafted copy in `scions/`
 - Premature separation (split before clear boundary)
 
 Related:

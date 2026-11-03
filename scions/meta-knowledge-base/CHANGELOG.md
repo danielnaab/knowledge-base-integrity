@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## v1.0.1 - 2026-11-03
+
+### Changed
+- **Manage KB dependencies playbook**: grafted copies live in `scions/` (graft 2.1's default),
+  not `vendor/`.
+
 ## v1.0.0 - 2026-11-02
 
 The first tagged release: what repos graft (https://github.com/danielnaab/graft/tree/v2).

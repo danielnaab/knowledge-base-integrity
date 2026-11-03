@@ -8,8 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - Exports for graft (https://github.com/danielnaab/graft): `.gitattributes` defines what repos
   that graft this get: README, CHANGELOG and `docs/`. `AGENTS.md`, `knowledge-base.yaml` and
-  `vendor/` are this repo's own.
-- meta-knowledge-base is grafted at `v1.0.0` into `vendor/`; AGENTS.md links into that copy.
+  `scions/` are this repo's own.
+- meta-knowledge-base is grafted at `v1.0.0` into `scions/`; AGENTS.md links into that copy.
 
 ## [0.1.0] - 2026-01-31
 
