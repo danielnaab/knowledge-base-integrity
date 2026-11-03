@@ -5,8 +5,8 @@ You are working in the **knowledge-base-integrity** repository — tooling for v
 ## Before Making Changes
 
 1. Read [knowledge-base.yaml](knowledge-base.yaml) for KB configuration
-2. Follow [meta knowledge base conventions](https://github.com/danielnaab/meta-knowledge-base)
-3. Follow [living specifications methodology](https://github.com/danielnaab/living-specifications)
+2. Follow [meta knowledge base conventions](vendor/meta-knowledge-base/README.md)
+3. Follow [living specifications methodology](vendor/living-specifications/README.md)
 4. Understand key policies:
    - **Authority**: specs/ canonical for tool behavior, docs/ canonical for usage
    - **Provenance**: Ground tool decisions in sources

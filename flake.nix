@@ -1,0 +1,12 @@
+{
+  description = "graft-pins";
+
+  # graft (https://github.com/danielnaab/graft) copies the pinned exports of the knowledge this repo
+  # follows into vendor/. `nix run .#graft` after changing a pin, then commit vendor/;
+  # `nix flake check` fails if vendor/ drifts from flake.lock.
+  inputs.graft.url = "github:danielnaab/graft/v2.0.0";
+  inputs.meta-knowledge-base = { url = "github:danielnaab/meta-knowledge-base/v1.0.0"; flake = false; };
+  inputs.living-specifications = { url = "github:danielnaab/living-specifications/v1.0.0"; flake = false; };
+
+  outputs = inputs: inputs.graft.lib.mkGraft { inherit inputs; deps = [ "meta-knowledge-base" "living-specifications" ]; };
+}
