@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tool_cli.graft import is_graft_dir
+
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)^---\s*\n", re.DOTALL | re.MULTILINE)
 STATUS_PATTERN = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
 SOURCES_HEADING_PATTERN = re.compile(r"^## Sources\s*$", re.MULTILINE)
@@ -101,7 +103,9 @@ def _get_content_files(root: Path) -> list[str]:
         if not dir_path.exists():
             continue
         for dirpath, dirnames, filenames in os.walk(dir_path):
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            dirnames[:] = [
+                d for d in dirnames if d not in SKIP_DIRS and not is_graft_dir(Path(dirpath, d))
+            ]
             for filename in filenames:
                 if filename.endswith(".md"):
                     full_path = os.path.join(dirpath, filename)

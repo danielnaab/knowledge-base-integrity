@@ -47,6 +47,12 @@ Three tools share identical CLI behavior: argument parsing, JSON output, exit co
 - When set: always exit 0 after printing output, regardless of failures
 - Purpose: informational runs in contexts where non-zero exit would abort a pipeline
 
+### Graft directories
+
+- `tool_cli.graft.is_graft_dir(path)` is true when `path/README.md` carries one of graft's markers in its first 2 KB: `<!-- managed by graft: https://github.com/danielnaab/graft -->` (graft 2.1 and later, line 1) or `Managed by [graft]` (2.0)
+- Every tool prunes such directories from its walk, at any depth
+- The markers match steward's `GRAFT_MARKERS` (duties/check-kb-integrity); change both together
+
 ## Constraints
 
 - No runtime dependencies beyond Python stdlib
@@ -58,6 +64,7 @@ Three tools share identical CLI behavior: argument parsing, JSON output, exit co
 - 2026-01-24: Extracted after 3 tools shared identical __main__.py patterns.
 - 2026-01-24: No argparse — the minimal interface (one flag, one positional) doesn't justify the dependency. If more flags are added, reconsider.
 - 2026-01-24: FileNotFoundError specifically (not general OSError) because tools raise it for missing config files (knowledge-base.yaml, spec directories).
+- 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
 
 ## Related
 

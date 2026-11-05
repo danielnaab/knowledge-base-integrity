@@ -122,6 +122,7 @@ Then the scanner includes that spec path in an orphans array in the output
 - Multiple annotations in one file: all recorded
 - Self-referencing specs: allowed (a spec can reference another spec)
 - README.md files in specs/: excluded from orphan detection (navigational, not behavioral)
+- Directories graft wrote: not scanned (see [tool-cli](tool-cli.md#graft-directories)); a provider's own `spec:` annotations would otherwise read as this repo's dangling references
 
 ## Constraints
 
@@ -140,6 +141,7 @@ Then the scanner includes that spec path in an orphans array in the output
 - 2026-01-24: Use JSON output for machine readability. Human-readable summaries can be built on top.
 - 2026-01-24: No external dependencies. Keeps the tool simple and the repo self-contained.
 - 2026-01-24: Fail by default on dangling references or orphan specs. These are broken links and dead weight respectively; failing early catches both. `--report-only` restores informational mode.
+- 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
 
 ## Sources
 

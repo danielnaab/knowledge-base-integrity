@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- All three tools skip directories graft wrote (`scions/`, or wherever graft's `dir` puts
+  them), recognized by the marker in their README.md. The link validator still checks links
+  into them.
+
 ## [0.1.0] - 2026-01-31
 
 ### Added

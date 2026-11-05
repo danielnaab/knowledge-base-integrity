@@ -112,6 +112,7 @@ Then it reports a "broken-link" violation with the source file, link target, and
 - Only `.md` files are scanned for links
 - Files in subdirectories are included recursively
 - Skips: .git/, .graft/, .venv/, node_modules/, __pycache__/
+- Skips directories graft wrote (see [tool-cli](tool-cli.md#graft-directories)); links *into* them are still checked, since the target exists
 
 ### Output structure
 
@@ -164,7 +165,7 @@ Example output:
 
 ## Open Questions
 
-- [ ] Should links to `.graft/` managed directories be validated? (They exist but are external dependencies)
+- [x] Should links into graft's directories be validated? Yes: they are this repo's links, and a target an upgrade removed is exactly the breakage to catch. Links *inside* graft's directories are not (2026-11-05).
 
 ## Decisions
 
@@ -177,6 +178,7 @@ Example output:
 - 2026-10-30: Accept CommonMark angle-bracket destinations (`<Name with spaces.md>`). Obsidian writes them for filenames with spaces.
 - 2026-10-30: Replace inline code spans with placeholder text, not nothing, before matching links. Removing them outright also removed code-span link text, so `` [`gate.py`](path) `` was never checked and a real broken link went unreported. A link written entirely inside a code span is still ignored.
 - 2026-10-30: Skip links inside HTML comments. They aren't rendered, and templates use them for commented-out example entries: henry-papa-workbench's notes/README.md had four example links in a `<!-- ... -->` block reported as broken.
+- 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
 
 ## Sources
 

@@ -116,6 +116,7 @@ Then no provenance violation is reported (a README indexes canonical docs; it is
 - README.md files are included (they carry status; they are exempt from provenance)
 - Files in subdirectories are included recursively
 - Skips: .git/, .graft/, .venv/, node_modules/, __pycache__/
+- Skips directories graft wrote (see [tool-cli](tool-cli.md#graft-directories))
 - Does not scan: specs/, src/, tests/, notes/ (specs have their own lifecycle; code and tests don't need frontmatter; notes are ephemeral)
 
 ### Output structure
@@ -183,6 +184,7 @@ Example output:
 - 2026-10-30: Decision records keep decision statuses. An ADR's status records the decision (proposed, accepted, rejected, superseded, deprecated), a separate axis from document lifecycle, so decision records may use those values as well as rules.lifecycle.statuses. Relabelling an accepted ADR as "stable" to satisfy the linter loses that information; Daniel rejected doing so. Evidence: graft's 9 accepted ADRs (docs/decisions/ and a grove adr-001 under docs/specifications/grove/) were flagged invalid-status. A decision record is a file under a decisions/ directory or named adr-*.md; a status is still required.
 - 2026-10-30: README.md files are exempt from provenance even when a sources.canonical glob (docs/decisions/**) covers them. A README indexes the canonical docs beside it; it is not a source of truth, and a Sources section on an index has nothing to cite. Status is still checked.
 
+- 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
 ## Sources
 
 - Living Specifications Principles — #2 (enforcement), #14 (fight tribal knowledge)

@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tool_cli.graft import is_graft_dir
+
 SPEC_PATTERN = re.compile(r"^\s*(?://|#)\s*spec:\s*([\w./\-]+)\s*$")
 SPEC_SECTION_PATTERN = re.compile(r"^\s*(?://|#)\s*spec-section:\s*(.+?)\s*$")
 FENCE_PATTERN = re.compile(r"^\s*```")
@@ -73,7 +75,11 @@ def _get_files(root: Path) -> list[str]:
     """Recursively collect file paths relative to root, skipping hidden/ignored dirs."""
     files: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in SKIP_DIRS and not d.startswith(".") and not is_graft_dir(Path(dirpath, d))
+        ]
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_path, root)
