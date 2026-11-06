@@ -32,6 +32,21 @@ Then it reads rules.lifecycle.statuses for valid status values
 ```
 
 ```gherkin
+Given a knowledge-base.yaml with rules.lifecycle.statuses written as a YAML list
+  (inline, quoted or bare: [draft, working] or ["draft", "working"], or a block list)
+When the linter starts
+Then it reads every status in the list
+  And a statuses value that is not a list of strings exits 2 (a configuration error), never an empty set
+```
+
+```gherkin
+Given a knowledge-base.yaml with rules.checks.lifecycle, rules.checks.provenance or extraStatuses
+When the linter starts
+Then it reads them as described in [tool-cli](tool-cli.md#path-scopes)
+  And a value of the wrong shape exits 2
+```
+
+```gherkin
 Given a knowledge-base.yaml where sources has sibling blocks after canonical
   (e.g. interpretation: and tracking: at the same indentation as canonical:)
 When the linter reads sources.canonical paths
@@ -76,6 +91,14 @@ Then no invalid-status violation is reported
 ```
 
 ```gherkin
+Given a frontmatter status of living
+When the file is checked
+Then no invalid-status violation is reported, whatever rules.lifecycle.statuses lists
+  (living marks an always-current document, per the meta-knowledge-base temporal-layers policy)
+  And statuses in rules.checks.lifecycle.extraStatuses are accepted the same way
+```
+
+```gherkin
 Given a file that is not a decision record (docs/guide.md, docs/decisions.md)
 When its status is a decision status not in rules.lifecycle.statuses (accepted)
 Then it reports an "invalid status" violation
@@ -84,9 +107,31 @@ Then it reports an "invalid status" violation
 ### Provenance validation
 
 ```gherkin
-Given a file in a path matching sources.canonical entries (docs/**)
+Given a file in the provenance scope
 When the file does not contain a ## Sources heading
 Then it reports a "missing provenance" violation
+```
+
+```gherkin
+Given a heading "## Sources" optionally followed by a space and more words ("## Sources and verification")
+When the file is checked for provenance
+Then the heading is accepted
+  And "## Sourcesx" and "### Sources" are not
+```
+
+```gherkin
+Given no rules.checks.provenance.include
+When the provenance scope is computed
+Then it is the files in the lifecycle scope that match sources.canonical (as before)
+  And canonical paths outside the lifecycle scope (AGENTS.md, flake.nix) are not scanned
+```
+
+```gherkin
+Given rules.checks.provenance.include in knowledge-base.yaml
+When the provenance scope is computed
+Then it is the .md files matching those globs, minus rules.checks.provenance.exclude
+  And sources.canonical no longer decides which files need Sources
+  And those files are scanned even when outside the lifecycle scope, but their status is not checked
 ```
 
 ```gherkin
@@ -111,13 +156,14 @@ Then no provenance violation is reported (a README indexes canonical docs; it is
 
 ### Scanned paths
 
-- Content directories: docs/
+- Lifecycle scope (status checked): `rules.checks.lifecycle.include` minus `.exclude`; default `docs/`, `policies/`, `playbooks/`
+- Files scanned: the lifecycle scope, plus the provenance scope when `rules.checks.provenance.include` is set
 - Only `.md` files are checked
 - README.md files are included (they carry status; they are exempt from provenance)
 - Files in subdirectories are included recursively
 - Skips: .git/, .graft/, .venv/, node_modules/, __pycache__/
 - Skips directories graft wrote (see [tool-cli](tool-cli.md#graft-directories))
-- Does not scan: specs/, src/, tests/, notes/ (specs have their own lifecycle; code and tests don't need frontmatter; notes are ephemeral)
+- By default does not scan: specs/, src/, tests/, notes/ (specs have their own lifecycle; code and tests don't need frontmatter; notes are ephemeral). A KB with a different layout declares its scopes instead (see [tool-cli](tool-cli.md#path-scopes))
 
 ### Output structure
 
@@ -163,11 +209,12 @@ Example output:
 - Binary files: skipped (UnicodeDecodeError caught)
 - File symlinks: resolved normally; directory symlinks: not followed (os.walk default)
 - knowledge-base.yaml missing: exit with error message (not a violation, a misconfiguration)
+- A configured value of the wrong shape (statuses not a list, include not a list of strings): exit 2 naming the key
 
 ## Constraints
 
 - Runs in Python (no runtime dependencies beyond standard library)
-- Reads configuration from `knowledge-base.yaml` (not hardcoded)
+- Reads configuration from `knowledge-base.yaml` (not hardcoded) through [tool-cli](tool-cli.md#configuration)
 - Completes in under 1 second for knowledge bases up to 1,000 content files
 
 ## Open Questions
@@ -185,6 +232,11 @@ Example output:
 - 2026-10-30: README.md files are exempt from provenance even when a sources.canonical glob (docs/decisions/**) covers them. A README indexes the canonical docs beside it; it is not a source of truth, and a Sources section on an index has nothing to cite. Status is still checked.
 
 - 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
+- 2026-11-05: Scan roots, status scope and provenance scope are configurable (`rules.checks`), with the old directories as defaults. A notebook-style KB (content under `notebook/`, root README/AGENTS) had 6 of ~75 files checked. When `rules.checks.provenance.include` is set it replaces `sources.canonical` as the provenance scope: canonical paths name sources of truth (config files), which are not necessarily documents that cite sources.
+- 2026-11-05: Statuses are read with the shared subset parser. The old regex accepted only JSON-style lists, so `statuses: [draft, working]` produced an empty set and the status check silently never ran. An unreadable statuses value now exits 2.
+- 2026-11-05: `living` is always an allowed status. The meta-knowledge-base temporal-layers policy prescribes `status: living` for always-current documents, while its lifecycle policy lists only draft/working/stable/deprecated, so a KB following both was flagged. The tool follows the policy that names the value instead of making each KB list it. Other extra statuses go in `rules.checks.lifecycle.extraStatuses`.
+- 2026-11-05: The Sources heading matches `## Sources` with optional trailing words. `## Sources and verification` is a real Sources section; the exact-match rule failed it. A different heading level or a longer word (`## Sourcesx`) still fails.
+
 ## Sources
 
 - Living Specifications Principles — #2 (enforcement), #14 (fight tribal knowledge)

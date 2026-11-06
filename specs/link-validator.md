@@ -108,7 +108,10 @@ Then it reports a "broken-link" violation with the source file, link target, and
 
 ### Scanned paths
 
-- Content directories: docs/, notes/, specs/
+- Scope: `rules.checks.links.include` minus `.exclude` in knowledge-base.yaml (see [tool-cli](tool-cli.md#path-scopes)); default `docs/`, `policies/`, `playbooks/`, `notes/`, `specs/`
+- knowledge-base.yaml is optional here: without it (or without `rules.checks.links`) the default scope applies
+- A configured value of the wrong shape exits 2
+- Root-level files (README.md, AGENTS.md) and hidden directories (`.pi/`) are scanned when an include glob names them
 - Only `.md` files are scanned for links
 - Files in subdirectories are included recursively
 - Skips: .git/, .graft/, .venv/, node_modules/, __pycache__/
@@ -179,6 +182,8 @@ Example output:
 - 2026-10-30: Replace inline code spans with placeholder text, not nothing, before matching links. Removing them outright also removed code-span link text, so `` [`gate.py`](path) `` was never checked and a real broken link went unreported. A link written entirely inside a code span is still ignored.
 - 2026-10-30: Skip links inside HTML comments. They aren't rendered, and templates use them for commented-out example entries: henry-papa-workbench's notes/README.md had four example links in a `<!-- ... -->` block reported as broken.
 - 2026-11-05: Skip directories graft wrote, found by the marker in their README.md (`tool_cli.graft.is_graft_dir`), wherever they sit: `scions/`, a hidden `.scions/`, or `docs/Grafted/`. A grafted directory is another repo's export, checked by that repo, and graft's `nix flake check` fails if it is edited here, so a finding inside one can't be acted on. Before this, only steward's check-kb-integrity duty filtered them, so a direct run reported upstream content as this repo's.
+
+- 2026-11-05: Scan scope is configurable (`rules.checks.links`) through the shared [tool-cli](tool-cli.md#configuration) reader, defaults unchanged. A notebook-style KB keeps its content under `notebook/` and at the root, which the hardcoded directories never reached. The configuration file stays optional for this tool, as before.
 
 ## Sources
 

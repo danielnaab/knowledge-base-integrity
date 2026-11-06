@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
 
-from tool_cli.graft import is_graft_dir
+from tool_cli import scope
+from tool_cli.config import get_list, load_config
 
 # Matches [text](target) and ![alt](target)
 LINK_PATTERN = re.compile(r"!?\[(?:[^\]]*)\]\(([^)]*)\)")
@@ -23,8 +24,6 @@ INLINE_CODE_PATTERN = re.compile(r"(`+)(.+?)\1")
 # HTML comments: links inside one are not rendered, so they are not checked.
 COMMENT_OPEN = "<!--"
 COMMENT_CLOSE = "-->"
-
-SKIP_DIRS = frozenset({".git", ".graft", ".venv", "node_modules", "__pycache__"})
 
 CONTENT_DIRS = ("docs", "policies", "playbooks", "notes", "specs")
 
@@ -172,22 +171,13 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
 
 
 def _get_content_files(root: Path) -> list[str]:
-    """Collect markdown files in content directories."""
-    files: list[str] = []
-    for content_dir in CONTENT_DIRS:
-        dir_path = root / content_dir
-        if not dir_path.exists():
-            continue
-        for dirpath, dirnames, filenames in os.walk(dir_path):
-            dirnames[:] = [
-                d for d in dirnames if d not in SKIP_DIRS and not is_graft_dir(Path(dirpath, d))
-            ]
-            for filename in filenames:
-                if filename.endswith(".md"):
-                    full_path = os.path.join(dirpath, filename)
-                    rel_path = os.path.relpath(full_path, root)
-                    files.append(rel_path)
-    return sorted(files)
+    """Collect the markdown files in the configured scope (rules.checks.links)."""
+    config = load_config(root)
+    include = get_list(config, "rules.checks.links.include")
+    if include is None:
+        include = [f"{d}/**" for d in CONTENT_DIRS]
+    exclude = get_list(config, "rules.checks.links.exclude") or []
+    return scope.collect(root, include, exclude)
 
 
 def validate(root_dir: str) -> ValidateResult:

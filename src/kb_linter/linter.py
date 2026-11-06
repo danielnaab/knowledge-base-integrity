@@ -3,26 +3,26 @@
 
 """Core linting logic for validating KB content against declared rules."""
 
-import contextlib
-import json
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tool_cli.graft import is_graft_dir
+from tool_cli import scope
+from tool_cli.config import get_list, load_config
 
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)^---\s*\n", re.DOTALL | re.MULTILINE)
 STATUS_PATTERN = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
-SOURCES_HEADING_PATTERN = re.compile(r"^## Sources\s*$", re.MULTILINE)
-
-SKIP_DIRS = frozenset({".git", ".graft", ".venv", "node_modules", "__pycache__"})
+# "## Sources", optionally followed by more words ("## Sources and verification").
+SOURCES_HEADING_PATTERN = re.compile(r"^## Sources(?:[ \t].*)?$", re.MULTILINE)
 
 CONTENT_DIRS = ("docs", "policies", "playbooks")
 
 # Decision records (ADRs) record a decision state, a separate axis from
 # document lifecycle, so they may use these statuses as well as the KB's own.
 DECISION_STATUSES = ("proposed", "accepted", "rejected", "superseded", "deprecated")
+
+# Always allowed: marks an always-current document (meta-knowledge-base temporal-layers policy).
+LIVING_STATUS = "living"
 
 
 @dataclass
@@ -39,7 +39,13 @@ class LintConfig:
     """Configuration read from knowledge-base.yaml."""
 
     valid_statuses: list[str] = field(default_factory=list)
+    # sources.canonical paths: the provenance scope unless provenance_include is set.
     provenance_paths: list[str] = field(default_factory=list)
+    extra_statuses: list[str] = field(default_factory=list)
+    lifecycle_include: list[str] = field(default_factory=list)
+    lifecycle_exclude: list[str] = field(default_factory=list)
+    provenance_include: list[str] | None = None
+    provenance_exclude: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -53,73 +59,37 @@ class LintResult:
 def parse_config(root: Path) -> LintConfig:
     """Read linting configuration from knowledge-base.yaml.
 
-    Extracts the specific values needed for linting from the known schema.
-    This is targeted extraction, not a general YAML parser.
+    Raises FileNotFoundError when the file is missing and ConfigError when a value the
+    linter enforces is present but unreadable (the tool must not silently check nothing).
     """
-    config_path = root / "knowledge-base.yaml"
-    if not config_path.exists():
-        raise FileNotFoundError(f"knowledge-base.yaml not found in {root}")
+    config = load_config(root, required=True)
 
-    content = config_path.read_text(encoding="utf-8")
-
-    # Extract statuses from inline list: statuses: ["draft", "working", ...]
-    statuses_match = re.search(r"statuses:\s*(\[.+?\])", content)
-    valid_statuses = []
-    if statuses_match:
-        with contextlib.suppress(json.JSONDecodeError):
-            valid_statuses = json.loads(statuses_match.group(1))
-
-    # Extract canonical paths from sources.canonical entries. The block ends at
-    # the next key at the same or lesser indentation as "canonical:" (a sibling
-    # such as "interpretation:", or a top-level key). List items may sit at the
-    # same indentation as their parent key, which YAML allows.
-    provenance_paths = []
-    canonical_indent: int | None = None
-    for line in content.splitlines():
-        stripped = line.strip()
-        indent = len(line) - len(line.lstrip())
-        if canonical_indent is None:
-            if stripped == "canonical:":
-                canonical_indent = indent
-            continue
-        if stripped == "" or stripped.startswith("#"):
-            continue
-        if stripped.startswith("- path:"):
-            if indent < canonical_indent:
-                break
-            path_value = stripped.removeprefix("- path:").strip().strip('"')
-            provenance_paths.append(path_value)
-        elif indent <= canonical_indent and not stripped.startswith("- "):
-            break  # Sibling or parent key: exited the canonical block
-
-    return LintConfig(valid_statuses=valid_statuses, provenance_paths=provenance_paths)
+    canonical = _canonical_paths(config)
+    lifecycle_include = get_list(config, "rules.checks.lifecycle.include")
+    return LintConfig(
+        valid_statuses=get_list(config, "rules.lifecycle.statuses") or [],
+        provenance_paths=canonical,
+        extra_statuses=get_list(config, "rules.checks.lifecycle.extraStatuses") or [],
+        lifecycle_include=(
+            lifecycle_include
+            if lifecycle_include is not None
+            else [f"{d}/**" for d in CONTENT_DIRS]
+        ),
+        lifecycle_exclude=get_list(config, "rules.checks.lifecycle.exclude") or [],
+        provenance_include=get_list(config, "rules.checks.provenance.include"),
+        provenance_exclude=get_list(config, "rules.checks.provenance.exclude") or [],
+    )
 
 
-def _get_content_files(root: Path) -> list[str]:
-    """Collect markdown files in content directories."""
-    files: list[str] = []
-    for content_dir in CONTENT_DIRS:
-        dir_path = root / content_dir
-        if not dir_path.exists():
-            continue
-        for dirpath, dirnames, filenames in os.walk(dir_path):
-            dirnames[:] = [
-                d for d in dirnames if d not in SKIP_DIRS and not is_graft_dir(Path(dirpath, d))
-            ]
-            for filename in filenames:
-                if filename.endswith(".md"):
-                    full_path = os.path.join(dirpath, filename)
-                    rel_path = os.path.relpath(full_path, root)
-                    files.append(rel_path)
-    return sorted(files)
-
-
-def _path_matches_glob(path: str, pattern: str) -> bool:
-    """Check if a path matches a simple glob pattern (supports trailing /**)."""
-    if pattern.endswith("/**"):
-        prefix = pattern[:-3]
-        return path.startswith(prefix + "/") or path == prefix
-    return path == pattern
+def _canonical_paths(config: dict) -> list[str]:
+    """The `path:` of each sources.canonical entry."""
+    sources = config.get("sources")
+    entries = sources.get("canonical") if isinstance(sources, dict) else None
+    paths: list[str] = []
+    for entry in entries or []:
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+            paths.append(entry["path"])
+    return paths
 
 
 def _is_decision_record(path: str) -> bool:
@@ -129,7 +99,13 @@ def _is_decision_record(path: str) -> bool:
     return "decisions" in parts[:-1] or name.lower().startswith("adr-")
 
 
-def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
+def _check_file(
+    root: Path,
+    file: str,
+    config: LintConfig,
+    check_status: bool,
+    check_provenance: bool,
+) -> list[Violation]:
     """Check a single file for violations."""
     violations: list[Violation] = []
     full_path = root / file
@@ -141,7 +117,7 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
 
     # Check frontmatter presence
     fm_match = FRONTMATTER_PATTERN.match(content)
-    if not fm_match:
+    if check_status and not fm_match:
         violations.append(
             Violation(
                 file=file,
@@ -149,7 +125,7 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
                 message="No YAML frontmatter found",
             )
         )
-    else:
+    elif check_status and fm_match:
         frontmatter = fm_match.group(1)
         status_match = STATUS_PATTERN.search(frontmatter)
         if not status_match:
@@ -163,6 +139,7 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
         elif config.valid_statuses:
             status_value = status_match.group(1)
             allowed = list(config.valid_statuses)
+            allowed += [s for s in (LIVING_STATUS, *config.extra_statuses) if s not in allowed]
             if _is_decision_record(file):
                 allowed += [s for s in DECISION_STATUSES if s not in allowed]
             if status_value not in allowed:
@@ -176,13 +153,7 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
                     )
                 )
 
-    # Check provenance for canonical paths. A README.md is an index of the
-    # canonical docs beside it, not a source of truth itself, so it is exempt.
-    is_index = Path(file).name == "README.md"
-    needs_provenance = not is_index and any(
-        _path_matches_glob(file, pattern) for pattern in config.provenance_paths
-    )
-    if needs_provenance and not SOURCES_HEADING_PATTERN.search(content):
+    if check_provenance and not SOURCES_HEADING_PATTERN.search(content):
         violations.append(
             Violation(
                 file=file,
@@ -192,6 +163,11 @@ def _check_file(root: Path, file: str, config: LintConfig) -> list[Violation]:
         )
 
     return violations
+
+
+def _is_index(file: str) -> bool:
+    """A README.md is an index of the docs beside it, not a source of truth: no Sources needed."""
+    return Path(file).name == "README.md"
 
 
 def lint(root_dir: str) -> LintResult:
@@ -208,11 +184,25 @@ def lint(root_dir: str) -> LintResult:
     """
     root = Path(root_dir).resolve()
     config = parse_config(root)
-    files = _get_content_files(root)
-    all_violations: list[Violation] = []
 
+    status_files = set(scope.collect(root, config.lifecycle_include, config.lifecycle_exclude))
+    if config.provenance_include is None:
+        # Canonical paths inside the lifecycle scope; canonical paths elsewhere
+        # (AGENTS.md, flake.nix) name sources of truth and are not scanned.
+        provenance_files = {
+            f for f in status_files if scope.matches_any(f, config.provenance_paths)
+        }
+    else:
+        provenance_files = set(
+            scope.collect(root, config.provenance_include, config.provenance_exclude)
+        )
+    provenance_files = {f for f in provenance_files if not _is_index(f)}
+
+    files = sorted(status_files | provenance_files)
+    all_violations: list[Violation] = []
     for file in files:
-        file_violations = _check_file(root, file, config)
-        all_violations.extend(file_violations)
+        all_violations.extend(
+            _check_file(root, file, config, file in status_files, file in provenance_files)
+        )
 
     return LintResult(violations=all_violations, files_checked=len(files))

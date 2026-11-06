@@ -4,8 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Scan scopes are configurable in `knowledge-base.yaml` under `rules.checks` (`links`, `lifecycle`,
+  `provenance`, each with `include`/`exclude` globs; `lifecycle.extraStatuses`). Defaults are the old
+  directories, so KBs without the block behave as before. A KB with content under `notebook/` or at
+  the root can now be checked in full, including hidden directories an include names (`.pi/skills/**`).
+- Shared `tool_cli.config` (YAML-subset reader) and `tool_cli.scope` (globs and file collection).
+
+### Fixed
+
+- `rules.lifecycle.statuses` written as a bare YAML list (`[draft, working]`) or block list was read as
+  empty, so the invalid-status check silently never ran. It is read correctly, and a value that cannot be
+  read as a list now exits 2.
+- `status: living` is accepted (the meta-knowledge-base temporal-layers policy prescribes it).
+- `## Sources and verification` and similar headings count as a Sources section.
+
 ### Changed
 
+- When `rules.checks.provenance.include` is set it replaces `sources.canonical` as the provenance scope.
 - All three tools skip directories graft wrote (`scions/`, or wherever graft's `dir` puts
   them), recognized by the marker in their README.md. The link validator still checks links
   into them.

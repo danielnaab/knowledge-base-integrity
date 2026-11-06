@@ -68,6 +68,29 @@ All tools produce JSON output:
 }
 ```
 
+## Configuration
+
+Defaults check `docs/`, `policies/`, `playbooks/` (and `notes/`, `specs/` for links). A KB with another
+layout declares its scopes in `knowledge-base.yaml`; every key is optional:
+
+```yaml
+rules:
+  lifecycle:
+    statuses: [draft, working, stable, deprecated]
+  checks:
+    links:
+      include: [README.md, AGENTS.md, docs/**, notebook/**]
+      exclude: [notebook/raw/**]
+    lifecycle:               # files whose frontmatter status is checked
+      include: [docs/**, notebook/wiki/**]
+      extraStatuses: [reference]   # `living` is always allowed
+    provenance:              # files that need a ## Sources section (README.md files are exempt)
+      include: [docs/**, notebook/wiki/**]
+```
+
+Globs: `*` within a segment, `**` across segments. A value of the wrong shape exits 2.
+See [tool-cli](specs/tool-cli.md#configuration) for details.
+
 ## Specifications
 
 Each tool has a living specification in the `specs/` directory:

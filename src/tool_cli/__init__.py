@@ -9,6 +9,8 @@ import sys
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from tool_cli.config import ConfigError
+
 T = TypeVar("T")
 
 
@@ -33,7 +35,7 @@ def run_tool(
 
     try:
         result = runner(root_dir)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ConfigError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(2)
 
