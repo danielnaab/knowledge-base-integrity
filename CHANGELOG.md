@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-06
+
 ### Added
 
 - Scan scopes are configurable in `knowledge-base.yaml` under `rules.checks` (`links`, `lifecycle`,
