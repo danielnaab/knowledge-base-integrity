@@ -1,12 +1,42 @@
 {
-  description = "graft-pins";
+  description = "knowledge-base-integrity: link validation, linting and backlink scanning for a knowledge base";
 
-  # graft (https://github.com/danielnaab/graft) copies the pinned exports of the knowledge this repo
-  # follows into scions/. `nix run .#graft` after changing a pin, then commit scions/;
-  # `nix flake check` fails if scions/ drifts from flake.lock.
-  inputs.graft.url = "github:danielnaab/graft/v2.5.0";
-  inputs.meta-knowledge-base = { url = "github:danielnaab/meta-knowledge-base/v1.0.1"; flake = false; };
-  inputs.living-specifications = { url = "github:danielnaab/living-specifications/v1.0.1"; flake = false; };
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    graft = { url = "github:danielnaab/graft/v2.6.0"; inputs.nixpkgs.follows = "nixpkgs"; };
+    meta-knowledge-base = { url = "github:danielnaab/meta-knowledge-base/v1.0.1"; flake = false; };
+    living-specifications = { url = "github:danielnaab/living-specifications/v1.0.1"; flake = false; };
+  };
 
-  outputs = inputs: inputs.graft.lib.mkGraft { inherit inputs; deps = [ "meta-knowledge-base" "living-specifications" ]; };
+  outputs = { nixpkgs, graft, ... }@inputs:
+    let
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+
+      # `nix run .#<name>` from a knowledge base's root; a repo that takes this flake as an input
+      # re-exports the ones it wants.
+      tool = pkgs: name: description: text: {
+        type = "app";
+        meta = { inherit description; };
+        program = nixpkgs.lib.getExe (pkgs.writeShellApplication {
+          inherit name;
+          runtimeInputs = [ pkgs.python3 ];
+          text = ''
+            export PYTHONPATH=${./src} PYTHONDONTWRITEBYTECODE=1
+            ${text}
+          '';
+        });
+      };
+
+      tools = pkgs: {
+        lint = tool pkgs "lint" "Check frontmatter status and provenance" "python3 -m kb_linter .";
+        check-links = tool pkgs "check-links" "Find broken internal markdown links" "python3 -m link_validator .";
+        scan-backlinks = tool pkgs "scan-backlinks" "Trace specs to their implementations" "python3 -m backlink_scanner .";
+        validate = tool pkgs "validate" "Check links, then report lint findings"
+          "python3 -m link_validator . && python3 -m kb_linter --report-only .";
+      };
+    in
+    graft.lib.mkFlake {
+      inherit inputs;
+      outputs.apps = nixpkgs.lib.genAttrs systems (system: tools nixpkgs.legacyPackages.${system});
+    };
 }

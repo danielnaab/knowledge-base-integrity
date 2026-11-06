@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
+### Added
+
+- The tools are flake apps: `nix run .#lint`, `.#check-links`, `.#scan-backlinks` and `.#validate`,
+  run from a knowledge base's root. A repo takes this flake as an input and re-exports the ones it
+  wants, in place of wrapping the modules itself.
+
+### Changed
+
+- graft v2.6.0.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added

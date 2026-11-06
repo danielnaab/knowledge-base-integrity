@@ -2,19 +2,21 @@
   "nodes": {
     "graft": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1793824823,
-        "narHash": "sha256-EEKHK2fJ5s4XaldKGxRK2hycu/pFhke6IeT4tbf75aA=",
+        "lastModified": 1793985600,
+        "narHash": "sha256-0Ya5FPbUsGBmQMt8FJUSgh/aUYz5lWwbTsHzFbOn428=",
         "owner": "danielnaab",
         "repo": "graft",
-        "rev": "90222eaeb71ff57542b2e22ed7f86d73cd290cbf",
+        "rev": "6dd3001e873f8d3a485fe6261b61f9e43e7128b1",
         "type": "github"
       },
       "original": {
         "owner": "danielnaab",
-        "ref": "v2.5.0",
+        "ref": "v2.6.0",
         "repo": "graft",
         "type": "github"
       }
@@ -73,7 +75,8 @@
       "inputs": {
         "graft": "graft",
         "living-specifications": "living-specifications",
-        "meta-knowledge-base": "meta-knowledge-base"
+        "meta-knowledge-base": "meta-knowledge-base",
+        "nixpkgs": "nixpkgs"
       }
     }
   },

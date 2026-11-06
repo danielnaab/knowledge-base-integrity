@@ -33,6 +33,16 @@ uv pip install -e .
 
 ## Usage
 
+From a knowledge base's root, through this repo's flake (`nix run github:danielnaab/knowledge-base-integrity#lint`),
+or re-exported by a repo that takes it as a flake input:
+
+```
+nix run .#validate         # links, then lint findings
+nix run .#lint             # frontmatter status and provenance
+nix run .#check-links      # broken internal markdown links
+nix run .#scan-backlinks   # spec-to-implementation traceability
+```
+
 All tools share the same CLI conventions:
 
 ```bash
