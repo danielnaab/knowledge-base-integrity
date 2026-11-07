@@ -8,8 +8,9 @@ This repository provides CLI tools that enforce structural integrity for knowled
 
 - **Broken backlinks** — spec annotations (`# spec:`) referencing non-existent files
 - **Orphan specs** — specification files with no implementation references
-- **Content violations** — missing frontmatter status fields or provenance sections
-- **Broken links** — internal markdown links pointing to non-existent files
+- **Content violations** — missing frontmatter status fields or provenance (Sources sections or `sources` frontmatter)
+- **Broken links** — internal markdown links pointing to non-existent files or headings
+- **OKF conformance** — for a declared [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundle: note types, index and log shapes, and links to notes not written yet
 
 ## Tools
 

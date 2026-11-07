@@ -3,17 +3,29 @@
 
 """Core validation logic for detecting broken internal markdown links."""
 
+import difflib
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
 
+from link_validator.anchors import has_anchor
 from tool_cli import scope
 from tool_cli.config import get_list, load_config
+from tool_cli.okf import Bundle, load_bundle
 
 # Matches [text](target) and ![alt](target)
 LINK_PATTERN = re.compile(r"!?\[(?:[^\]]*)\]\(([^)]*)\)")
+
+# [[Wikilinks]]: not Markdown links, so a bundle (Markdown links only) rejects them.
+WIKILINK_PATTERN = re.compile(r"!?\[\[[^\]\n]+\]\]")
+
+# A destination followed by a CommonMark link title: path "Title" or path 'Title'.
+TITLE_PATTERN = re.compile(r"""^(\S+)\s+(?:"[^"]*"|'[^']*')\s*$""")
+
+# How close an unwritten note's name must be to an existing one to be flagged as a likely typo.
+TYPO_CUTOFF = 0.85
 
 # Matches opening/closing code fences
 FENCE_PATTERN = re.compile(r"^(`{3,}|~{3,})")
@@ -37,7 +49,7 @@ URI_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 
 @dataclass
 class LinkViolation:
-    """A single broken link."""
+    """A single link finding: a failure in `violations`, or a notice that does not fail."""
 
     file: str
     target: str
@@ -51,6 +63,8 @@ class ValidateResult:
     """Result of validating links across a KB."""
 
     violations: list[LinkViolation] = field(default_factory=list)
+    # Findings that do not fail the run: unwritten notes in an OKF bundle, likely typos.
+    notices: list[LinkViolation] = field(default_factory=list)
     files_checked: int = 0
     links_checked: int = 0
 
@@ -67,21 +81,21 @@ def _strip_comments(line: str, in_comment: bool) -> tuple[str, bool]:
             end = rest.find(COMMENT_CLOSE)
             if end == -1:
                 return visible, True
-            rest = rest[end + len(COMMENT_CLOSE):]
+            rest = rest[end + len(COMMENT_CLOSE) :]
             in_comment = False
         else:
             start = rest.find(COMMENT_OPEN)
             if start == -1:
                 return visible + rest, False
             visible += rest[:start]
-            rest = rest[start + len(COMMENT_OPEN):]
+            rest = rest[start + len(COMMENT_OPEN) :]
             in_comment = True
     return visible, in_comment
 
 
-def _extract_links(content: str) -> list[str]:
-    """Extract link targets from markdown, skipping fenced code blocks and HTML comments."""
-    targets: list[str] = []
+def _visible_lines(content: str) -> list[str]:
+    """Each line's rendered text: fenced code blocks and HTML comments dropped, code spans neutral."""
+    visible_lines: list[str] = []
     in_fence = False
     in_comment = False
     fence_char = ""
@@ -120,13 +134,33 @@ def _extract_links(content: str) -> list[str]:
         # Code spans go first, so a `<!--` written inside one doesn't open a comment.
         line_without_code = INLINE_CODE_PATTERN.sub("code", line)
         visible, in_comment = _strip_comments(line_without_code, False)
+        visible_lines.append(visible)
 
+    return visible_lines
+
+
+def _extract_links(content: str) -> list[str]:
+    """Extract link targets from markdown, skipping fenced code blocks and HTML comments."""
+    targets: list[str] = []
+    for visible in _visible_lines(content):
         for match in LINK_PATTERN.finditer(visible):
             target = match.group(1).strip()
             if target:
                 targets.append(target)
-
     return targets
+
+
+def _extract_wikilinks(content: str) -> list[str]:
+    """[[Wikilinks]] outside code and comments."""
+    return [m.group(0) for line in _visible_lines(content) for m in WIKILINK_PATTERN.finditer(line)]
+
+
+def _split_title(target: str) -> str:
+    """Drop a CommonMark link title ([text](path "Title")), keeping the destination."""
+    if target.startswith("<"):
+        return target
+    match = TITLE_PATTERN.match(target)
+    return match.group(1) if match else target
 
 
 def _strip_target(target: str) -> str:
@@ -140,10 +174,11 @@ def _strip_target(target: str) -> str:
     return target
 
 
-def _resolve_path(target: str, file_dir: str) -> str | None:
+def _resolve_path(target: str, file_dir: str, root_prefix: str = "") -> str | None:
     """Resolve a link target to a path relative to the file's directory.
 
-    Returns None if the target is external or empty after stripping.
+    Returns None if the target is external or empty after stripping. A target starting
+    with "/" resolves from root_prefix: the repository root, or an OKF bundle's root.
     """
     # CommonMark angle-bracket destination: [text](<Name with spaces.md>)
     if target.startswith("<") and target.endswith(">"):
@@ -159,7 +194,7 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
 
     # Absolute paths resolve from root
     if stripped.startswith("/"):
-        resolved = os.path.normpath(stripped.lstrip("/"))
+        resolved = os.path.normpath(os.path.join(root_prefix, stripped.lstrip("/")))
     else:
         resolved = os.path.normpath(os.path.join(file_dir, stripped))
 
@@ -170,9 +205,17 @@ def _resolve_path(target: str, file_dir: str) -> str | None:
     return resolved
 
 
-def _get_content_files(root: Path) -> list[str]:
+def _fragment(target: str) -> str:
+    """The decoded fragment of a link target, or "" when it has none."""
+    if target.startswith("<") and target.endswith(">"):
+        target = target[1:-1].strip()
+    if "#" not in target:
+        return ""
+    return unquote(target[target.index("#") + 1 :])
+
+
+def _get_content_files(root: Path, config: dict) -> list[str]:
     """Collect the markdown files in the configured scope (rules.checks.links)."""
-    config = load_config(root)
     include = get_list(config, "rules.checks.links.include")
     if include is None:
         include = [f"{d}/**" for d in CONTENT_DIRS]
@@ -180,52 +223,169 @@ def _get_content_files(root: Path) -> list[str]:
     return scope.collect(root, include, exclude)
 
 
+class _BundleNames:
+    """The notes in an OKF bundle by lower-cased filename, for spotting misdirected links."""
+
+    def __init__(self, root: Path, bundle: Bundle) -> None:
+        self.by_name: dict[str, list[str]] = {}
+        for path in bundle.all_markdown(root):
+            self.by_name.setdefault(Path(path).name.lower(), []).append(path)
+
+    def same_name(self, resolved: str) -> list[str]:
+        return self.by_name.get(Path(resolved).name.lower(), [])
+
+    def close_names(self, resolved: str) -> list[str]:
+        name = Path(resolved).name.lower()
+        matches = difflib.get_close_matches(name, list(self.by_name), n=3, cutoff=TYPO_CUTOFF)
+        return [p for m in matches for p in self.by_name[m]]
+
+
+def _check_link(
+    root: Path,
+    file: str,
+    raw_target: str,
+    bundle: Bundle | None,
+    names: _BundleNames | None,
+) -> tuple[str | None, LinkViolation | None, bool]:
+    """Classify one link: (resolved path or None if not checked, finding or None, is notice)."""
+    target = _split_title(raw_target)
+    fragment = _fragment(target)
+    in_bundle = bundle is not None and bundle.contains(file)
+
+    def finding(resolved: str, rule: str, message: str) -> LinkViolation:
+        return LinkViolation(
+            file=file, target=raw_target, resolved=resolved, rule=rule, message=message
+        )
+
+    if target.startswith("#"):  # a heading in the same file
+        if fragment and not has_anchor(root / file, fragment):
+            return (
+                file,
+                finding(file, "missing-anchor", f"No heading or anchor '{fragment}' in this file"),
+                False,
+            )
+        return file, None, False
+
+    prefix = bundle.root if in_bundle and bundle is not None else ""
+    resolved = _resolve_path(target, os.path.dirname(file), prefix)
+    if resolved is None:
+        return None, None, False  # external or empty
+
+    if in_bundle:
+        angle = target.startswith("<") and target.endswith(">")
+        if not angle and re.search(r"\s", target):
+            return (
+                resolved,
+                finding(
+                    resolved,
+                    "malformed-link",
+                    "Unencoded space in a link destination; use %20 or <angle brackets>",
+                ),
+                False,
+            )
+        if bundle is not None and not resolved.startswith("..") and not bundle.contains(resolved):
+            return (
+                resolved,
+                finding(
+                    resolved,
+                    "escapes-bundle",
+                    f"Link leaves the OKF bundle ({bundle.root or '.'}/); use an absolute URL or a backticked path",
+                ),
+                False,
+            )
+
+    resolved_full = root / resolved
+    if resolved_full.exists():
+        if (
+            fragment
+            and resolved_full.is_file()
+            and resolved_full.suffix == ".md"
+            and not has_anchor(resolved_full, fragment)
+        ):
+            return (
+                resolved,
+                finding(
+                    resolved, "missing-anchor", f"No heading or anchor '{fragment}' in {resolved}"
+                ),
+                False,
+            )
+        return resolved, None, False
+
+    if (
+        in_bundle
+        and names is not None
+        and resolved.endswith(".md")
+        and not resolved.startswith("..")
+    ):
+        elsewhere = names.same_name(resolved)
+        if elsewhere:
+            return (
+                resolved,
+                finding(
+                    resolved,
+                    "misdirected-link",
+                    f"No note here, but one with this name exists: {', '.join(elsewhere)}",
+                ),
+                False,
+            )
+        close = names.close_names(resolved)
+        if close:
+            return (
+                resolved,
+                finding(
+                    resolved,
+                    "likely-typo",
+                    f"Unwritten note with a name close to: {', '.join(close)}",
+                ),
+                True,
+            )
+        return resolved, finding(resolved, "unwritten-link", "Note not written yet"), True
+
+    return resolved, LinkViolation(file=file, target=raw_target, resolved=resolved), False
+
+
 def validate(root_dir: str) -> ValidateResult:
     """Validate internal links across a KB directory.
 
-    Scans markdown files for links and checks that targets exist.
+    Scans markdown files for links and checks that targets exist. Inside an OKF bundle
+    (rules.checks.okf), a missing note is unwritten (a notice), and links must stay in the bundle.
 
     Args:
         root_dir: The KB root directory.
 
     Returns:
-        ValidateResult with violations, file count, and link count.
+        ValidateResult with violations, notices, file count, and link count.
     """
     root = Path(root_dir).resolve()
-    files = _get_content_files(root)
-    all_violations: list[LinkViolation] = []
-    total_links = 0
+    config = load_config(root)
+    bundle = load_bundle(root, config)
+    names = _BundleNames(root, bundle) if bundle is not None else None
+    files = _get_content_files(root, config)
+    result = ValidateResult(files_checked=len(files))
 
     for file in files:
-        full_path = root / file
         try:
-            content = full_path.read_text(encoding="utf-8")
+            content = (root / file).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
 
-        file_dir = os.path.dirname(file)
-        targets = _extract_links(content)
-
-        for target in targets:
-            resolved = _resolve_path(target, file_dir)
-            if resolved is None:
-                continue  # External or empty
-
-            total_links += 1
-            resolved_full = root / resolved
-
-            # Check if target exists as file or directory
-            if not resolved_full.exists():
-                all_violations.append(
-                    LinkViolation(
-                        file=file,
-                        target=target,
-                        resolved=resolved,
-                    )
+        if bundle is not None and bundle.contains(file):
+            result.violations.extend(
+                LinkViolation(
+                    file=file,
+                    target=wikilink,
+                    resolved="",
+                    rule="wikilink",
+                    message="Wikilinks are not Markdown links; write [text](path.md)",
                 )
+                for wikilink in _extract_wikilinks(content)
+            )
 
-    return ValidateResult(
-        violations=all_violations,
-        files_checked=len(files),
-        links_checked=total_links,
-    )
+        for raw_target in _extract_links(content):
+            resolved, found, is_notice = _check_link(root, file, raw_target, bundle, names)
+            if resolved is not None:
+                result.links_checked += 1
+            if found is not None:
+                (result.notices if is_notice else result.violations).append(found)
+
+    return result

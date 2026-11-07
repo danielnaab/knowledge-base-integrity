@@ -225,8 +225,9 @@ class TestValidation:
 
     def test_relative_links_still_checked_alongside_schemes(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
-        (tmp_path / "notes/target.md").write_text("# Target\n")
+        (tmp_path / "notes/target.md").write_text("# Target\n\n## Section\n")
         (tmp_path / "notes/source.md").write_text(
+            "## Local anchor\n"
             "[email](airmail://message?mail=x)\n"
             "[ok](target.md)\n"
             "[anchor](target.md#section)\n"
@@ -236,7 +237,7 @@ class TestValidation:
 
         result = validate(str(tmp_path))
 
-        assert result.links_checked == 3
+        assert result.links_checked == 4
         assert len(result.violations) == 1
         assert result.violations[0].target == "missing.md"
 
@@ -284,7 +285,7 @@ class TestValidation:
 
     def test_strips_fragment_before_checking(self, tmp_path: Path) -> None:
         _setup_kb(tmp_path)
-        (tmp_path / "policies/rules.md").write_text("# Rules\n")
+        (tmp_path / "policies/rules.md").write_text("# Rules\n\n## Section\n")
         (tmp_path / "docs/source.md").write_text("See [rules](../policies/rules.md#section).\n")
 
         result = validate(str(tmp_path))
