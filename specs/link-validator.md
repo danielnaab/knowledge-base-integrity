@@ -117,6 +117,7 @@ Then ATX (## Heading) and setext (Heading over === or ---) headings count, inclu
     character repeated at least as long (a ``` line inside a ```` block does not close it)
 ```
 
+- `rules.checks.links.anchors: false` turns anchor checks off, for a KB that needs time to fix them after upgrading; any value but `true` or `false` exits 2.
 - Fragments on links to directories or non-markdown files (`file.pdf#page=2`) are not checked, nor on links with a query (`file.md?plain=1#L3` is a source view's line).
 - Same-file links now count toward `links_checked`.
 

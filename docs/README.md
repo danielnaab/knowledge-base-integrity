@@ -37,6 +37,7 @@ By default the tools check `docs/`, `policies/`, `playbooks/` (the linter) and a
 | `rules.checks.lifecycle.include` / `exclude` | kb-linter | Files whose frontmatter `status` is checked |
 | `rules.checks.lifecycle.extraStatuses` | kb-linter | Statuses allowed beyond `rules.lifecycle.statuses` (`living` is always allowed) |
 | `rules.checks.provenance.include` / `exclude` | kb-linter | Files that need a `## Sources` section or `sources` frontmatter; replaces `sources.canonical` as the scope |
+| `rules.checks.links.anchors` | link-validator | `false` turns heading-anchor checks off (default `true`) |
 | `rules.checks.okf.bundle` | both | A directory that is an OKF bundle (see below) |
 | `rules.checks.okf.version` | kb-linter | The `okf_version` the bundle-root `index.md` must declare |
 

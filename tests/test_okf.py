@@ -475,3 +475,21 @@ class TestReviewRegressions:
             tmp_path, parse_subset("rules:\n  checks:\n    okf:\n      bundle: notes/..\n")
         )
         assert bundle is not None and bundle.root == ""
+
+
+class TestAnchorOptOut:
+    def test_anchors_can_be_turned_off(self, tmp_path: Path) -> None:
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/a.md").write_text("[b](b.md#nope) [s](#nope)\n")
+        (tmp_path / "docs/b.md").write_text("x\n")
+        (tmp_path / "knowledge-base.yaml").write_text(
+            "rules:\n  checks:\n    links:\n      include: [docs/**]\n      anchors: false\n"
+        )
+        assert validate(str(tmp_path)).violations == []
+
+    def test_bad_anchors_value_is_a_config_error(self, tmp_path: Path) -> None:
+        (tmp_path / "knowledge-base.yaml").write_text(
+            "rules:\n  checks:\n    links:\n      anchors: sometimes\n"
+        )
+        with pytest.raises(ConfigError, match="anchors"):
+            validate(str(tmp_path))

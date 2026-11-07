@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 from link_validator.anchors import has_anchor
 from tool_cli import scope
-from tool_cli.config import get_list, load_config
+from tool_cli.config import CONFIG_FILE, ConfigError, get_list, get_value, load_config
 from tool_cli.okf import Bundle, load_bundle
 
 # Matches [text](target) and ![alt](target)
@@ -248,6 +248,7 @@ def _check_link(
     raw_target: str,
     bundle: Bundle | None,
     names: _BundleNames | None,
+    check_anchors: bool = True,
 ) -> tuple[str | None, LinkViolation | None, bool]:
     """Classify one link: (resolved path or None if not checked, finding or None, is notice)."""
     target = _split_title(raw_target)
@@ -260,7 +261,7 @@ def _check_link(
         )
 
     if target.startswith("#"):  # a heading in the same file
-        if fragment and not has_anchor(root / file, fragment):
+        if check_anchors and fragment and not has_anchor(root / file, fragment):
             return (
                 file,
                 finding(file, "missing-anchor", f"No heading or anchor '{fragment}' in this file"),
@@ -299,7 +300,8 @@ def _check_link(
     resolved_full = root / resolved
     if resolved_full.exists():
         if (
-            fragment
+            check_anchors
+            and fragment
             and "?" not in target  # file.md?plain=1#L3 is a source view's line, not a heading
             and resolved_full.is_file()
             and resolved_full.suffix == ".md"
@@ -348,6 +350,16 @@ def _check_link(
     return resolved, LinkViolation(file=file, target=raw_target, resolved=resolved), False
 
 
+def _anchors_enabled(config: dict) -> bool:
+    """rules.checks.links.anchors: true (the default) or false; anything else exits 2."""
+    value = get_value(config, "rules.checks.links.anchors")
+    if value is None:
+        return True
+    if isinstance(value, str) and value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    raise ConfigError(f"{CONFIG_FILE}: 'rules.checks.links.anchors' must be true or false")
+
+
 def validate(root_dir: str) -> ValidateResult:
     """Validate internal links across a KB directory.
 
@@ -364,6 +376,7 @@ def validate(root_dir: str) -> ValidateResult:
     config = load_config(root)
     bundle = load_bundle(root, config)
     names = _BundleNames(root, bundle) if bundle is not None else None
+    check_anchors = _anchors_enabled(config)
     files = _get_content_files(root, config)
     result = ValidateResult(files_checked=len(files))
 
@@ -386,7 +399,9 @@ def validate(root_dir: str) -> ValidateResult:
             )
 
         for raw_target in _extract_links(content):
-            resolved, found, is_notice = _check_link(root, file, raw_target, bundle, names)
+            resolved, found, is_notice = _check_link(
+                root, file, raw_target, bundle, names, check_anchors
+            )
             if resolved is not None:
                 result.links_checked += 1
             if found is not None:

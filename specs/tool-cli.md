@@ -110,6 +110,7 @@ Then it returns the .md files matching an include and no exclude, sorted by path
 | `rules.checks.lifecycle.include` / `.exclude` | kb-linter (status) | `docs/** policies/** playbooks/**` |
 | `rules.checks.lifecycle.extraStatuses` | kb-linter | none (`living` is always allowed) |
 | `rules.checks.provenance.include` / `.exclude` | kb-linter (Sources) | `sources.canonical` paths within the lifecycle scope |
+| `rules.checks.links.anchors` | link-validator | `true`: heading anchors are checked |
 | `rules.checks.okf.bundle` | kb-linter, link-validator | none: no OKF checks (see [OKF bundle](#okf-bundle)) |
 | `rules.checks.okf.version` | kb-linter | none: `okf_version` not checked |
 

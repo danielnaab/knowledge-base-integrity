@@ -29,7 +29,8 @@ Planned as 0.4.0.
 ### Upgrading
 
 - A KB without `rules.checks.okf` sees two changes: links to missing headings fail (`missing-anchor`), and
-  same-file `#heading` links count toward `links_checked`. Fix the anchor or the heading.
+  same-file `#heading` links count toward `links_checked`. Fix the anchor or the heading, or set
+  `rules.checks.links.anchors: false` until you can.
 - Anything parsing link-validator's JSON should read the new `notices` array; notices never fail a run.
 
 ## [0.3.0] - 2026-11-06
