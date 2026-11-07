@@ -10,7 +10,9 @@ from typing import Any
 
 CONFIG_FILE = "knowledge-base.yaml"
 
-_KEY_PATTERN = re.compile(r"""^("[^"]*"|'[^']*'|[^\s:#'"\-\[][^:]*?|-[^\s:][^:]*?)\s*:(?:\s+(.*))?$""")
+_KEY_PATTERN = re.compile(
+    r"""^("[^"]*"|'[^']*'|[^\s:#'"\-\[][^:]*?|-[^\s:][^:]*?)\s*:(?:\s+(.*))?$"""
+)
 _BLOCK_SCALAR = re.compile(r"^[|>][+-]?\d*$")
 
 
@@ -40,10 +42,11 @@ def _unquote(text: str) -> str:
 
 
 def _split_inline(body: str) -> list[str]:
-    """Split the inside of an inline list on commas that are outside quotes."""
+    """Split the inside of an inline list or mapping on commas outside quotes and brackets."""
     items: list[str] = []
     current = ""
     quote = ""
+    depth = 0
     for ch in body:
         if quote:
             current += ch
@@ -52,20 +55,47 @@ def _split_inline(body: str) -> list[str]:
         elif ch in "\"'":
             quote = ch
             current += ch
-        elif ch == ",":
+        elif ch in "[{":
+            depth += 1
+            current += ch
+        elif ch in "]}":
+            depth -= 1
+            current += ch
+        elif ch == "," and depth == 0:
             items.append(current)
             current = ""
         else:
             current += ch
     if current.strip():
         items.append(current)
-    return [_unquote(i) for i in items if i.strip()]
+    return [i.strip() for i in items if i.strip()]
+
+
+def _flow_mapping(body: str) -> dict[str, Any]:
+    """An inline mapping ({ by: x, at: 2026-01-01T00:00:00Z }); keys split at the first ": "."""
+    result: dict[str, Any] = {}
+    for item in _split_inline(body):
+        key, sep, value = item.partition(":")
+        if not sep:
+            continue
+        if value and not value[0].isspace():
+            # "a:b" is not a key; YAML needs ": ". Retry at the first ": ".
+            key, sep, value = item.partition(": ")
+            if not sep:
+                continue
+        result[_unquote(key)] = _scalar(value)
+    return result
 
 
 def _scalar(text: str) -> Any:
     text = text.strip()
     if text.startswith("[") and text.endswith("]"):
-        return _split_inline(text[1:-1])
+        return [_scalar(i) for i in _split_inline(text[1:-1])]
+    if text.startswith("{") and text.endswith("}"):
+        items = _split_inline(text[1:-1])
+        # Only "key: value" items make a mapping; {draft} and {{type}} (a template) stay strings.
+        if items and all(re.search(r":(\s|$)", i) for i in items):
+            return _flow_mapping(text[1:-1])
     return _unquote(text)
 
 
@@ -134,7 +164,7 @@ def _parse_sequence(lines: list[tuple[int, str]], i: int, indent: int) -> tuple[
                 result.append(value)
             else:
                 result.append(None)
-        elif _KEY_PATTERN.match(body) and not body.startswith(("[", '"', "'")):
+        elif _KEY_PATTERN.match(body) and not body.startswith(("[", "{", '"', "'")):
             # "- path: x": the item is a mapping whose first key shares the dash's line.
             lines[i] = (indent + offset, body)
             value, i = _parse_mapping(lines, i, indent + offset)

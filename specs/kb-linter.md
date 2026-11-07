@@ -1,6 +1,6 @@
 ---
 status: working
-last-verified: 2026-01-24
+last-verified: 2026-11-06
 owners: [daniel]
 ---
 
@@ -8,7 +8,7 @@ owners: [daniel]
 
 ## Intent
 
-Enforce the content rules declared in [`knowledge-base.yaml`](../knowledge-base.yaml) — validating that content files have proper frontmatter status fields and provenance (Sources sections) where required.
+Enforce the content rules declared in [`knowledge-base.yaml`](../knowledge-base.yaml) — validating that content files have proper frontmatter status fields and provenance (a Sources section or `sources` frontmatter) where required, and that an OKF bundle the KB declares conforms to OKF v0.2.
 
 This gives Principle #2 ("source-of-truth requires enforcement") its mechanical backing: rules declared in configuration are checked by tooling, not just convention.
 
@@ -108,8 +108,22 @@ Then it reports an "invalid status" violation
 
 ```gherkin
 Given a file in the provenance scope
-When the file does not contain a ## Sources heading
+When the file has neither a ## Sources heading nor sources frontmatter
 Then it reports a "missing provenance" violation
+```
+
+```gherkin
+Given a file whose frontmatter has a sources list in which every entry is a mapping with a non-empty resource
+When the file is checked for provenance
+Then the list counts as provenance, the same as a ## Sources section
+  (structured provenance: meta-knowledge-base v1.1.0 provenance policy, OKF v0.2 §5.1)
+```
+
+```gherkin
+Given any checked file whose frontmatter has a sources key
+When sources is not a non-empty list, or an entry is not a mapping or has no resource
+Then it reports an "invalid-sources" violation naming the first bad entry
+  And no "missing provenance" violation is added for the same file
 ```
 
 ```gherkin
@@ -154,10 +168,49 @@ Then no provenance violation is reported (a README indexes canonical docs; it is
   And other files in the same canonical path still need a Sources section
 ```
 
+### OKF conformance
+
+Runs only when `rules.checks.okf.bundle` declares a bundle (see [tool-cli](tool-cli.md#okf-bundle)). Every note in the bundle is checked, whatever the lifecycle and provenance scopes say.
+
+```gherkin
+Given a note in the bundle that is not index.md or log.md
+When it has no frontmatter block
+Then it reports "okf-missing-frontmatter"
+When its frontmatter has no type, or an empty or non-string type
+Then it reports "okf-missing-type"
+```
+
+```gherkin
+Given an index.md in the bundle
+When it has frontmatter
+Then it reports "okf-index-frontmatter", unless it is the bundle-root index.md and okf_version is its only key
+When a body line outside code fences is not a heading, an entry (* [Title](url) or * [Title](url) - description,
+  with * or -), or a line that is one HTML comment
+Then it reports "okf-index-entry" with the line number
+```
+
+```gherkin
+Given a log.md in the bundle
+When a level-2 heading is not an ISO date (## YYYY-MM-DD)
+Then it reports "okf-log-date"
+```
+
+```gherkin
+Given rules.checks.okf.version
+When the bundle-root index.md is missing or its okf_version differs
+Then it reports "okf-version" on that index.md
+```
+
+```gherkin
+Given index.md or log.md in the bundle, inside the lifecycle or provenance scope
+When the file is checked
+Then status and Sources are not required (OKF forbids frontmatter there; they list, they do not claim)
+```
+
 ### Scanned paths
 
 - Lifecycle scope (status checked): `rules.checks.lifecycle.include` minus `.exclude`; default `docs/`, `policies/`, `playbooks/`
-- Files scanned: the lifecycle scope, plus the provenance scope when `rules.checks.provenance.include` is set
+- Files scanned: the lifecycle scope, plus the provenance scope when `rules.checks.provenance.include` is set, plus the bundle's notes when `rules.checks.okf.bundle` is set
 - Only `.md` files are checked
 - README.md files are included (they carry status; they are exempt from provenance)
 - Files in subdirectories are included recursively
@@ -172,6 +225,8 @@ Given completed linting
 When results are reported
 Then output is a JSON object with a flat violations array and a summary object
 ```
+
+Rules: `missing-frontmatter`, `missing-status`, `invalid-status`, `missing-provenance`, `invalid-sources`, and with a bundle `okf-missing-frontmatter`, `okf-missing-type`, `okf-index-frontmatter`, `okf-index-entry`, `okf-log-date`, `okf-version`.
 
 Example output:
 ```json
@@ -236,9 +291,14 @@ Example output:
 - 2026-11-05: Statuses are read with the shared subset parser. The old regex accepted only JSON-style lists, so `statuses: [draft, working]` produced an empty set and the status check silently never ran. An unreadable statuses value now exits 2.
 - 2026-11-05: `living` is always an allowed status. The meta-knowledge-base temporal-layers policy prescribes `status: living` for always-current documents, while its lifecycle policy lists only draft/working/stable/deprecated, so a KB following both was flagged. The tool follows the policy that names the value instead of making each KB list it. Other extra statuses go in `rules.checks.lifecycle.extraStatuses`.
 - 2026-11-05: The Sources heading matches `## Sources` with optional trailing words. `## Sources and verification` is a real Sources section; the exact-match rule failed it. A different heading level or a longer word (`## Sourcesx`) still fails.
+- 2026-11-06: `sources` frontmatter counts as provenance in every KB, not only OKF bundles. The meta-knowledge-base v1.1.0 provenance policy makes it equivalent to a Sources section. A present but malformed list is reported as invalid rather than missing, so the finding points at the entry to fix.
+- 2026-11-06: OKF conformance is checked here, not by OKF Wiki's `okf` CLI: this tool already gates every workspace, honours `.okfignore`, and keeps one finding format. The checks are OKF v0.2 §11: frontmatter with a non-empty `type` on every note, and the §8 and §9 shapes for `index.md` and `log.md`. Optional families (`generated`, `verified`, `stale_after`) are not validated, since OKF forbids rejecting a note for them.
+- 2026-11-06: An index body is headings and entries only. Workspace indexes are generated, so prose in one means a hand edit the generator will drop; HTML comment lines are allowed for a generator's marker.
 
 ## Sources
 
 - Living Specifications Principles — #2 (enforcement), #14 (fight tribal knowledge)
 - Living Specifications Format — "Status is non-negotiable"
+- [OKF v0.2 specification](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) — §4.1 frontmatter, §5.1 sources, §8 index files, §9 log files, §11 conformance
+- [Meta-KB provenance policy](../scions/meta-knowledge-base/docs/policies/provenance.md) — structured provenance (v1.1.0)
 - [Backlink Scanner](backlink-scanner.md) — sibling tool, structural patterns to follow

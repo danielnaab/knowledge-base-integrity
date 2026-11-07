@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Planned as 0.4.0.
+
+### Added
+
+- OKF bundles: `rules.checks.okf.bundle` declares a directory as an OKF v0.2 bundle, and `.okfignore` at its
+  root (`.gitignore` syntax) excludes files from it.
+  - kb-linter checks conformance: every note has frontmatter with a non-empty `type`; `index.md` has no
+    frontmatter (the root's may hold `okf_version`) and lists headings and entries; `log.md` headings are dates.
+    `rules.checks.okf.version` pins the root's `okf_version`.
+  - link-validator classifies links in the bundle: a missing note is an `unwritten-link` or `likely-typo`
+    notice and does not fail; `escapes-bundle`, `malformed-link`, `misdirected-link` and `wikilink` fail.
+    `/` links resolve from the bundle root. Output gains a `notices` array and `unwritten`/`likely_typos` counts.
+- Structured provenance (meta-knowledge-base v1.1.0): a `sources` frontmatter list whose entries each have a
+  `resource` counts as provenance in every KB; a malformed one is `invalid-sources`.
+- link-validator checks heading anchors in every KB (`missing-anchor`), accepting GitHub and dashed slugs,
+  Obsidian heading text and block ids, and HTML ids.
+- The configuration reader reads inline mappings (`{ by: x, at: y }`) and nested inline lists.
+
+### Changed
+
+- meta-knowledge-base v1.1.0 (structured provenance; raw-sources and historical layers).
+
+### Fixed
+
+- Link titles (`[x](path.md "Title")`) are no longer read as part of the path.
+
+### Upgrading
+
+- A KB without `rules.checks.okf` sees two changes: links to missing headings fail (`missing-anchor`), and
+  same-file `#heading` links count toward `links_checked`. Fix the anchor or the heading, or set
+  `rules.checks.links.anchors: false` until you can.
+- Anything parsing link-validator's JSON should read the new `notices` array; notices never fail a run.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added

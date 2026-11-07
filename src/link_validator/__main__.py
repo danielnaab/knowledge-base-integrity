@@ -3,27 +3,31 @@
 
 """CLI entry point for the link validator."""
 
-from link_validator.validator import ValidateResult, validate
+from link_validator.validator import LinkViolation, ValidateResult, validate
 from tool_cli import run_tool
 
 
-def _serialize(result: ValidateResult) -> dict:
-    """Convert ValidateResult to a JSON-serializable dict."""
+def _finding(v: LinkViolation) -> dict:
     return {
-        "violations": [
-            {
-                "file": v.file,
-                "target": v.target,
-                "resolved": v.resolved,
-                "rule": v.rule,
-                "message": v.message,
-            }
-            for v in result.violations
-        ],
+        "file": v.file,
+        "target": v.target,
+        "resolved": v.resolved,
+        "rule": v.rule,
+        "message": v.message,
+    }
+
+
+def _serialize(result: ValidateResult) -> dict:
+    """Convert ValidateResult to a JSON-serializable dict. Notices never fail the run."""
+    return {
+        "violations": [_finding(v) for v in result.violations],
+        "notices": [_finding(v) for v in result.notices],
         "summary": {
             "files_checked": result.files_checked,
             "links_checked": result.links_checked,
             "broken": len(result.violations),
+            "unwritten": sum(1 for v in result.notices if v.rule == "unwritten-link"),
+            "likely_typos": sum(1 for v in result.notices if v.rule == "likely-typo"),
         },
     }
 

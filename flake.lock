@@ -41,16 +41,16 @@
     "meta-knowledge-base": {
       "flake": false,
       "locked": {
-        "lastModified": 1793687928,
-        "narHash": "sha256-aoIeWfcouAlS2HvgOwqXI0UgMud4B/8qpfvmwepAURU=",
+        "lastModified": 1794022011,
+        "narHash": "sha256-WVoRvfpgn6l+stULkuFwZpW8K6K+oPqWpQbcW5NnJzQ=",
         "owner": "danielnaab",
         "repo": "meta-knowledge-base",
-        "rev": "262707b2deff0892fda50dec0f3020ce3a1125f2",
+        "rev": "8223746e072f3effdc7057e9869e986c02fc55f7",
         "type": "github"
       },
       "original": {
         "owner": "danielnaab",
-        "ref": "v1.0.1",
+        "ref": "v1.1.0",
         "repo": "meta-knowledge-base",
         "type": "github"
       }
