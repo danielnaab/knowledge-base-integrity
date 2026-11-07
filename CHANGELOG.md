@@ -22,6 +22,10 @@ Planned as 0.4.0.
   Obsidian heading text and block ids, and HTML ids.
 - The configuration reader reads inline mappings (`{ by: x, at: y }`) and nested inline lists.
 
+### Changed
+
+- meta-knowledge-base v1.1.0 (structured provenance; raw-sources and historical layers).
+
 ### Fixed
 
 - Link titles (`[x](path.md "Title")`) are no longer read as part of the path.
