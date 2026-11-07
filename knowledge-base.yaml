@@ -1,6 +1,6 @@
 apiVersion: kb/v1
 name: knowledge-base-integrity
-version: 0.3.0
+version: 0.4.0
 description: "Tooling for validating and enforcing knowledge base conventions"
 
 entrypoints:
