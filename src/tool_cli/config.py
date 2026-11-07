@@ -92,7 +92,10 @@ def _scalar(text: str) -> Any:
     if text.startswith("[") and text.endswith("]"):
         return [_scalar(i) for i in _split_inline(text[1:-1])]
     if text.startswith("{") and text.endswith("}"):
-        return _flow_mapping(text[1:-1])
+        items = _split_inline(text[1:-1])
+        # Only "key: value" items make a mapping; {draft} and {{type}} (a template) stay strings.
+        if items and all(re.search(r":(\s|$)", i) for i in items):
+            return _flow_mapping(text[1:-1])
     return _unquote(text)
 
 

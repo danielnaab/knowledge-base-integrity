@@ -67,6 +67,8 @@ Then values are available by key path (rules.lifecycle.statuses)
   And YAML outside this subset (anchors, block scalars) is ignored, not an error
 ```
 
+A braced value becomes a mapping only when every item is `key: value`; `{draft}` and a template's `{{type}}` stay strings, as before.
+
 The same reader parses note frontmatter (`type`, `sources`, `okf_version`); an inline mapping's key ends at its first `: `, so `by: human:dan` reads as `{by: "human:dan"}`.
 
 ```gherkin
@@ -118,7 +120,7 @@ A KB may declare a directory as an [OKF](https://github.com/GoogleCloudPlatform/
 ```gherkin
 Given rules.checks.okf.bundle names a directory in the repository ("notebook", or "." for the root)
 When a tool starts
-Then that directory is the bundle
+Then that directory, normalized (notes/.. is the root), is the bundle
   And rules.checks.okf that is not a mapping, a bundle that is not a directory in the repository,
     or a version that is not a string exits 2
 ```
@@ -128,7 +130,8 @@ Given a .okfignore file at the bundle root
 When the bundle's notes are collected
 Then its patterns follow .gitignore rules: # comments, ! negation, a trailing / for directories,
   a / at the start or middle anchors the pattern to the bundle root, otherwise it matches at any depth,
-  *, ?, [...] and **
+  *, ?, [...], and ** as a whole segment (**/x, x/**, a/**/b; elsewhere ** is *)
+  And trailing spaces are stripped unless escaped
   And the last matching pattern decides, and a file under an excluded directory stays excluded
   And excluded files are not notes: they get no OKF conformance checks
 ```

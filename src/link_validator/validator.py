@@ -19,10 +19,14 @@ from tool_cli.okf import Bundle, load_bundle
 LINK_PATTERN = re.compile(r"!?\[(?:[^\]]*)\]\(([^)]*)\)")
 
 # [[Wikilinks]]: not Markdown links, so a bundle (Markdown links only) rejects them.
-WIKILINK_PATTERN = re.compile(r"!?\[\[[^\]\n]+\]\]")
+# Not followed by "(": [[1]](#ref) is a citation-style link, not a wikilink.
+WIKILINK_PATTERN = re.compile(r"!?\[\[[^\]\n]+\]\](?!\()")
 
 # A destination followed by a CommonMark link title: path "Title" or path 'Title'.
-TITLE_PATTERN = re.compile(r"""^(\S+)\s+(?:"[^"]*"|'[^']*')\s*$""")
+TITLE_PATTERN = re.compile(r"""^(<[^>]*>|\S+)\s+(?:"[^"]*"|'[^']*')\s*$""")
+
+# Filenames many folders share: an unwritten one is not a misdirected link to another folder's.
+COMMON_NAMES = frozenset({"index.md", "readme.md", "log.md"})
 
 # How close an unwritten note's name must be to an existing one to be flagged as a likely typo.
 TYPO_CUTOFF = 0.85
@@ -156,9 +160,7 @@ def _extract_wikilinks(content: str) -> list[str]:
 
 
 def _split_title(target: str) -> str:
-    """Drop a CommonMark link title ([text](path "Title")), keeping the destination."""
-    if target.startswith("<"):
-        return target
+    """Drop a CommonMark link title ([text](path "Title"), [text](<path> "Title"))."""
     match = TITLE_PATTERN.match(target)
     return match.group(1) if match else target
 
@@ -298,6 +300,7 @@ def _check_link(
     if resolved_full.exists():
         if (
             fragment
+            and "?" not in target  # file.md?plain=1#L3 is a source view's line, not a heading
             and resolved_full.is_file()
             and resolved_full.suffix == ".md"
             and not has_anchor(resolved_full, fragment)
@@ -317,7 +320,8 @@ def _check_link(
         and resolved.endswith(".md")
         and not resolved.startswith("..")
     ):
-        elsewhere = names.same_name(resolved)
+        common = Path(resolved).name.lower() in COMMON_NAMES
+        elsewhere = [] if common else names.same_name(resolved)
         if elsewhere:
             return (
                 resolved,
@@ -328,7 +332,7 @@ def _check_link(
                 ),
                 False,
             )
-        close = names.close_names(resolved)
+        close = [] if common else names.close_names(resolved)
         if close:
             return (
                 resolved,

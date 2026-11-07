@@ -97,7 +97,8 @@ Then it removes the angle brackets and resolves the path inside them: Name with 
 Given a link with a fragment to an existing .md file, or a same-file link (#fragment)
 When the fragment is decoded (%20 to a space)
 Then it passes if the target file has a matching anchor:
-  a heading's GitHub slug, compared in any case (## Done when → done-when; repeats get -1, -2)
+  a heading's GitHub slug, compared in any case (## Done when → done-when; a repeat takes the next
+    free -1, -2, skipping slugs already taken: Foo, Foo, Foo-1 → foo, foo-1, foo-1-1)
   a heading's dashed slug, where each run of punctuation and space is one "-" (What's open → what-s-open)
   a heading's text as Obsidian writes it (Done%20when), or the last part of a nested Parent#Child
   an Obsidian block id (^block-1) on a line ending in ^block-1
@@ -108,12 +109,15 @@ Then it passes if the target file has a matching anchor:
 ```gherkin
 Given headings in a target file
 When its anchors are collected
-Then ATX (## Heading) and setext (Heading over === or ---) headings count
+Then ATX (## Heading) and setext (Heading over === or ---) headings count, including ATX headings
+    in blockquotes, callouts and list items (> ## A, - ## B)
+  And slugs are made from the rendered text: images and HTML tags dropped, link text kept,
+    entities decoded (Run <code>make</code> → run-make, A &amp; B → a--b)
   And frontmatter and fenced code blocks are not read, and a fence closes only on its own
     character repeated at least as long (a ``` line inside a ```` block does not close it)
 ```
 
-- Fragments on links to directories or non-markdown files (`file.pdf#page=2`) are not checked.
+- Fragments on links to directories or non-markdown files (`file.pdf#page=2`) are not checked, nor on links with a query (`file.md?plain=1#L3` is a source view's line).
 - Same-file links now count toward `links_checked`.
 
 ### Links in an OKF bundle
@@ -124,6 +128,7 @@ Applies to links written in files inside the bundle `rules.checks.okf.bundle` de
 Given a link in the bundle whose target is a missing .md file inside the bundle
 When no file with that name (any case) exists elsewhere in the bundle
 Then it is a notice, not a violation: "unwritten-link" (OKF §6.1: a note not written yet)
+  And an unwritten index.md, README.md or log.md is always "unwritten-link": many folders share those names
   Or "likely-typo" when a note's filename is close to it (difflib ratio at least 0.85), naming the note
 When a note with the same filename exists elsewhere in the bundle
 Then it reports "misdirected-link" naming that note (a wrong relative path, typically a wrong depth)
@@ -140,7 +145,8 @@ Then it resolves from the bundle root, as OKF §6.1 defines
 ```
 
 ```gherkin
-Given a [[wikilink]] in a file in the bundle, outside code and HTML comments
+Given a [[wikilink]] in a file in the bundle, outside code and HTML comments, not followed by "("
+  ([[1]](#ref) is a citation-style link)
 When the validator scans it
 Then it reports "wikilink": a bundle uses Markdown links only
 ```
@@ -255,7 +261,8 @@ Example output:
 - 2026-11-06: Check heading anchors. The 2026-01-24 non-goal deferred it as the harder problem; the notebook-conventions OKF proposal makes a missing anchor a failure, and across 19 local KBs the check found one real broken anchor once nested fences and dashed slugs were handled. Several slug styles are accepted because these KBs are read on GitHub, Forgejo and in Obsidian, which write different ones.
 - 2026-11-06: In an OKF bundle a missing note is a notice, not a failure. OKF §6.1 treats a link to a missing concept as not-yet-written knowledge, and the notebook links people and topics before their notes exist. A same-name note elsewhere is a failure instead (`misdirected-link`): a wrong relative depth is the common mistake, and an unwritten note with exactly an existing note's filename is rare. A merely close name stays a notice (`likely-typo`) because there is no way to mark a deliberate near-duplicate.
 - 2026-11-06: Bundle rules apply only inside the bundle. Escaping links, wikilinks and unencoded spaces stay legal elsewhere, so KBs without a bundle see no change beyond anchors and link titles.
-- 2026-11-06: Strip CommonMark link titles. `[x](path.md "Title")` was checked as the path `path.md "Title"` and reported broken.
+- 2026-11-06: A review of the branch found false positives this spec now rules out: headings in blockquotes and lists, HTML and entities in headings, taken suffixed slugs, line anchors on source views, citation brackets, and common filenames read as misdirected links.
+- 2026-11-06: Strip CommonMark link titles, after an angle-bracket destination too. `[x](path.md "Title")` was checked as the path `path.md "Title"` and reported broken.
 
 ## Sources
 

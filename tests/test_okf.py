@@ -411,3 +411,67 @@ class TestAnchors:
         (tmp_path / "docs/a.md").write_text("[pdf](b.pdf#page=2) [dir](./#x)\n")
         (tmp_path / "docs/b.pdf").write_text("x")
         assert validate(str(tmp_path)).violations == []
+
+
+class TestReviewRegressions:
+    """Cases from the 2026-11-06 review of the OKF branch."""
+
+    def test_headings_in_blockquotes_callouts_and_lists(self, tmp_path: Path) -> None:
+        note = tmp_path / "n.md"
+        note.write_text("> ## Quoted\n\n> [!note]\n> ### In callout\n\n- ## In list\n")
+        for fragment in ("quoted", "in-callout", "in-list"):
+            assert has_anchor(note, fragment), fragment
+
+    def test_html_entities_and_images_in_headings(self) -> None:
+        assert github_slug('<a id="x"></a>Setup') == "setup"
+        assert github_slug("Run <code>make</code>") == "run-make"
+        assert github_slug("A &amp; B") == "a--b"
+        assert github_slug("![logo](l.png) Title") == "title"
+
+    def test_suffixed_slugs_skip_taken_ones(self, tmp_path: Path) -> None:
+        note = tmp_path / "n.md"
+        note.write_text("# Foo\n# Foo\n# Foo-1\n")
+        for fragment in ("foo", "foo-1", "foo-1-1"):
+            assert has_anchor(note, fragment), fragment
+
+    def test_angle_destination_with_title_in_bundle(self, tmp_path: Path) -> None:
+        _kb(tmp_path, {"notebook/a.md": '[x](<sub/b.md> "t")\n', "notebook/sub/b.md": "x\n"})
+        result = validate(str(tmp_path))
+        assert result.violations == [] and result.notices == []
+
+    def test_query_links_skip_anchor_checks(self, tmp_path: Path) -> None:
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs/a.md").write_text("[c](b.md?plain=1#L3)\n")
+        (tmp_path / "docs/b.md").write_text("x\n")
+        assert validate(str(tmp_path)).violations == []
+
+    def test_citation_brackets_are_not_wikilinks(self, tmp_path: Path) -> None:
+        _kb(tmp_path, {"notebook/a.md": "Claim [[1]](#ref).\n\n## Ref\n"})
+        assert validate(str(tmp_path)).violations == []
+
+    def test_unwritten_common_names_are_not_misdirected(self, tmp_path: Path) -> None:
+        _kb(tmp_path, {"notebook/a.md": "[new](projects/new/index.md) [r](x/README.md)\n"})
+        result = validate(str(tmp_path))
+        assert result.violations == []
+        assert [n.rule for n in result.notices] == ["unwritten-link", "unwritten-link"]
+
+    def test_braces_without_pairs_stay_strings(self) -> None:
+        config = parse_subset("a: {draft}\ntype: {{type}}\nb:\n  - {a,b}\nc: { by: x }\n")
+        assert config["a"] == "{draft}"
+        assert config["type"] == "{{type}}"
+        assert config["b"] == ["{a,b}"]
+        assert config["c"] == {"by": "x"}
+
+    def test_okfignore_double_star_inside_a_segment_is_a_star(self, tmp_path: Path) -> None:
+        _kb(tmp_path, {"notebook/.okfignore": "foo**bar\n"})
+        bundle = load_bundle(tmp_path, parse_subset(KB_YAML))
+        assert bundle is not None
+        assert bundle.is_ignored("notebook/fooxbar")
+        assert not bundle.is_ignored("notebook/foo/x/bar")
+
+    def test_bundle_path_is_normalized(self, tmp_path: Path) -> None:
+        (tmp_path / "notes").mkdir()
+        bundle = load_bundle(
+            tmp_path, parse_subset("rules:\n  checks:\n    okf:\n      bundle: notes/..\n")
+        )
+        assert bundle is not None and bundle.root == ""

@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+import posixpath
 import re
 from dataclasses import dataclass, field
 from functools import cache
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from tool_cli import scope
@@ -75,7 +76,7 @@ def load_bundle(root: Path, config: dict[str, Any]) -> Bundle | None:
     bundle = okf.get("bundle")
     if not isinstance(bundle, str) or not bundle.strip():
         raise ConfigError(f"{CONFIG_FILE}: 'rules.checks.okf.bundle' must be a directory path")
-    normalized = PurePosixPath(bundle.strip().strip("/") or ".").as_posix()
+    normalized = posixpath.normpath(bundle.strip().strip("/") or ".")
     normalized = "" if normalized == "." else normalized
     if normalized.startswith("..") or not (root / normalized).is_dir():
         raise ConfigError(
@@ -93,7 +94,7 @@ def parse_ignore(text: str) -> list[tuple[re.Pattern[str], bool, bool]]:
     """Read .okfignore with .gitignore pattern rules: (regex, negated, directory-only) per line."""
     rules: list[tuple[re.Pattern[str], bool, bool]] = []
     for raw in text.splitlines():
-        line = re.sub(r"(?<!\\)[ \t]+$", "", raw)
+        line = re.sub(r"(?<!\\) +$", "", raw)
         if not line or line.startswith("#"):
             continue
         negated = line.startswith("!")
@@ -126,14 +127,16 @@ def _ignore_regex(pattern: str, anchored: bool) -> re.Pattern[str]:
     out = ""
     i = 0
     while i < len(pattern):
-        if pattern.startswith("**/", i):
+        # ** is special only as a whole segment (**/x, x/**, x/**/y); elsewhere it is a *.
+        whole = pattern.startswith("**", i) and (i == 0 or pattern[i - 1] == "/")
+        if whole and pattern.startswith("**/", i):
             out += "(?:.*/)?"
             i += 3
-        elif pattern.startswith("/**", i) and i + 3 == len(pattern):
-            out += "/.*"
-            i += 3
-        elif pattern.startswith("**", i):
+        elif whole and i + 2 == len(pattern):
             out += ".*"
+            i += 2
+        elif pattern.startswith("**", i):
+            out += "[^/]*"
             i += 2
         elif pattern[i] == "*":
             out += "[^/]*"

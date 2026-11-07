@@ -3,6 +3,7 @@
 
 """The fragments a markdown file answers to: heading slugs, heading text, block ids, HTML ids."""
 
+import html
 import re
 from functools import cache
 from pathlib import Path
@@ -14,23 +15,37 @@ SETEXT_UNDERLINE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 BLOCK_ID = re.compile(r"(?:^|\s)\^([A-Za-z0-9-]+)[ \t]*$")
 HTML_ID = re.compile(r"""<[A-Za-z][^>]*?\s(?:id|name)\s*=\s*["']([^"']+)["']""")
-MARKDOWN_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+HTML_TAG = re.compile(r"<[^>]+>")
+# Blockquote markers and a list marker in front of a heading (> ## A, - ## B, > 1. ## C).
+CONTAINER_PREFIX = re.compile(r"^(?:[ \t]*>[ \t]?)*(?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+)?")
 GITHUB_DROP = re.compile(r"[^\w\- ]")
 NON_WORD_RUN = re.compile(r"[^\w]+")
 OBSIDIAN_DROP = re.compile(r"[\[\]#|^:\\]")
 
 
+def _plain(text: str) -> str:
+    """Heading text as rendered: images and HTML tags dropped, link text kept, entities decoded."""
+    plain = MARKDOWN_LINK.sub(r"\1", MARKDOWN_IMAGE.sub("", text))
+    plain = html.unescape(HTML_TAG.sub("", plain))
+    return re.sub(r"[`*~]", "", plain)  # emphasis and code marks; "_" stays, as in snake_case
+
+
 def github_slug(text: str) -> str:
     """GitHub's heading id: plain text, lower case, punctuation dropped, spaces to hyphens."""
-    plain = MARKDOWN_LINK.sub(r"\1", text)
-    plain = re.sub(r"[`*~]", "", plain)  # emphasis and code marks; "_" stays, as in snake_case
-    return GITHUB_DROP.sub("", plain.strip().lower()).replace(" ", "-")
+    return GITHUB_DROP.sub("", _plain(text).strip().lower()).replace(" ", "-")
 
 
 def dashed_slug(text: str) -> str:
     """The slug some renderers write instead: every run of punctuation and space becomes one "-"."""
-    plain = re.sub(r"[`*~]", "", MARKDOWN_LINK.sub(r"\1", text))
-    return NON_WORD_RUN.sub("-", plain.strip().lower()).strip("-")
+    return NON_WORD_RUN.sub("-", _plain(text).strip().lower()).strip("-")
+
+
+def _heading_in_list(line: str) -> str:
+    """A list item holding a heading (- ## Heading) as the heading line; other lines unchanged."""
+    stripped = CONTAINER_PREFIX.sub("", line, count=1)
+    return stripped if stripped != line and ATX_HEADING.match(stripped) else line
 
 
 def _obsidian_key(text: str) -> str:
@@ -52,7 +67,9 @@ def _anchors(path: Path, mtime_ns: int) -> tuple[frozenset[str], frozenset[str],
     ids: set[str] = set()
     fence = ""  # the open fence's marker; a closing fence repeats its character, at least as long
     previous = ""
-    for line in body.splitlines():
+    for raw in body.splitlines():
+        line = CONTAINER_PREFIX.sub("", raw, count=1) if raw.lstrip().startswith(">") else raw
+        line = line if ATX_HEADING.match(line) else _heading_in_list(line)
         marker = FENCE.match(line)
         if fence:
             closes = marker and line.strip() == marker.group(1)
@@ -82,13 +99,17 @@ def _anchors(path: Path, mtime_ns: int) -> tuple[frozenset[str], frozenset[str],
         ids.update(HTML_ID.findall(line))
         previous = line
 
+    # github-slugger: a repeat takes the next free "-N", skipping slugs already taken (Foo, Foo, Foo-1
+    # give foo, foo-1, foo-1-1).
     slugs: set[str] = set()
     seen: dict[str, int] = {}
     for heading in headings:
-        slug = github_slug(heading)
-        count = seen.get(slug, 0)
-        seen[slug] = count + 1
-        slugs.add(slug if count == 0 else f"{slug}-{count}")
+        base = github_slug(heading)
+        slug = base
+        while slug in slugs:
+            seen[base] = seen.get(base, 0) + 1
+            slug = f"{base}-{seen[base]}"
+        slugs.add(slug)
     slugs.update(dashed_slug(h) for h in headings)
     keys = frozenset(_obsidian_key(h) for h in headings)
     return frozenset(slugs), keys, frozenset(ids)
