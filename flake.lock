@@ -7,16 +7,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1793985600,
-        "narHash": "sha256-0Ya5FPbUsGBmQMt8FJUSgh/aUYz5lWwbTsHzFbOn428=",
+        "lastModified": 1794087003,
+        "narHash": "sha256-Tx8gPydxs+GrYBXUkCw+S4uZiZ08tTIpHPNAdbwu4rA=",
         "owner": "danielnaab",
         "repo": "graft",
-        "rev": "6dd3001e873f8d3a485fe6261b61f9e43e7128b1",
+        "rev": "5ecc7ed95ba1c75350ea952f15988ba7daaee2db",
         "type": "github"
       },
       "original": {
         "owner": "danielnaab",
-        "ref": "v2.6.0",
+        "ref": "v2.7.1",
         "repo": "graft",
         "type": "github"
       }
